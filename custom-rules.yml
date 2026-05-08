@@ -1,0 +1,12 @@
+
+# Auto-generated from run #test-local — 20260508-171330
+rules:
+  - id: test-rule-delete-me
+    patterns:
+      - pattern: eval(...)
+    message: Test rule — delete after verifying PR flow
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: CWE-95
+
