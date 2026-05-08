@@ -1,0 +1,211 @@
+{
+  "target": "NodeGoat",
+  "languages": [
+    "javascript"
+  ],
+  "findings_count": 20,
+  "findings": [
+    {
+      "vulnerability": "Server-Side JavaScript Injection via eval()",
+      "cwe": "CWE-95",
+      "severity": "CRITICAL",
+      "owasp": "A03:2021",
+      "file": "app/routes/contributions.js",
+      "line": 19,
+      "description": "User-supplied input from req.body.preTax, req.body.afterTax, and req.body.roth is passed directly to eval(). An attacker can execute arbitrary server-side JavaScript by submitting payloads such as 'process.exit(0)' or 'require(\"child_process\").execSync(\"id\")'. Fix: replace eval() with parseInt() or parseFloat() and validate the result with isNaN().",
+      "category": "Injection"
+    },
+    {
+      "vulnerability": "NoSQL Injection via $where with Unsanitized Input",
+      "cwe": "CWE-943",
+      "severity": "CRITICAL",
+      "owasp": "A03:2021",
+      "file": "app/data/allocations-dao.js",
+      "line": 58,
+      "description": "The 'threshold' query parameter is interpolated directly into a MongoDB $where JavaScript expression: `this.userId == ${parsedUserId} && this.stocks > '${threshold}'`. An attacker can inject arbitrary JS into the MongoDB engine, e.g. threshold=0';while(true){} causes an infinite loop (DoS), and threshold=1'; return 1=='1 bypasses the filter entirely. Fix: parse threshold with parseInt(), validate its range, and use a standard MongoDB query operator instead of $where.",
+      "category": "Injection"
+    },
+    {
+      "vulnerability": "Open Redirect",
+      "cwe": "CWE-601",
+      "severity": "HIGH",
+      "owasp": "A01:2021",
+      "file": "app/routes/index.js",
+      "line": 55,
+      "description": "The /learn endpoint performs res.redirect(req.query.url) with no validation of the destination URL. Any authenticated user can be redirected to an arbitrary external domain, enabling phishing attacks (e.g. /learn?url=https://evil.com). Fix: maintain an allowlist of permitted redirect targets or validate that the URL is relative/same-origin before redirecting.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Server-Side Request Forgery (SSRF)",
+      "cwe": "CWE-918",
+      "severity": "HIGH",
+      "owasp": "A10:2021",
+      "file": "app/routes/research.js",
+      "line": 15,
+      "description": "req.query.url and req.query.symbol are concatenated and passed directly to needle.get(). An attacker can force the server to make requests to internal network resources (e.g. http://169.254.169.254/latest/meta-data/ on AWS, or internal MongoDB/Redis endpoints). The response body is then written directly to the client, leaking internal data. Fix: validate and allowlist permitted URL prefixes (e.g. only https://finance.yahoo.com/quote/) before making the outbound request.",
+      "category": "Injection"
+    },
+    {
+      "vulnerability": "Insecure Direct Object Reference (IDOR) on Allocations",
+      "cwe": "CWE-639",
+      "severity": "HIGH",
+      "owasp": "A01:2021",
+      "file": "app/routes/allocations.js",
+      "line": 14,
+      "description": "The userId for the allocations lookup is taken from req.params (the URL path) rather than from req.session. Any authenticated user can access any other user's allocation data by simply changing the userId in the URL (e.g. /allocations/1, /allocations/2). The commented-out fix correctly shows using req.session.userId instead.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Plaintext Password Storage",
+      "cwe": "CWE-256",
+      "severity": "HIGH",
+      "owasp": "A02:2021",
+      "file": "app/data/user-dao.js",
+      "line": 18,
+      "description": "User passwords are stored in MongoDB in plaintext. The bcrypt hashing code is present but commented out. If the database is compromised, all user credentials are immediately exposed. Fix: uncomment the bcrypt.hashSync() call in addUser() and the bcrypt.compareSync() call in validateLogin(), and re-hash all existing passwords.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "Plaintext Password Comparison",
+      "cwe": "CWE-916",
+      "severity": "HIGH",
+      "owasp": "A02:2021",
+      "file": "app/data/user-dao.js",
+      "line": 57,
+      "description": "The comparePassword function performs a direct string equality check (fromDB === fromUser) instead of using a constant-time bcrypt comparison. This means passwords are stored and compared in plaintext, and the comparison is also vulnerable to timing attacks. Fix: use bcrypt.compareSync() as shown in the commented-out fix.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "Hardcoded Cryptographic Keys and Cookie Secret",
+      "cwe": "CWE-321",
+      "severity": "HIGH",
+      "owasp": "A02:2021",
+      "file": "config/env/all.js",
+      "line": 7,
+      "description": "The session cookie secret ('session_cookie_secret_key_here') and AES encryption key ('a_secure_key_for_crypto_here') are hardcoded in source code. Anyone with access to the repository can forge session cookies or decrypt sensitive data. Fix: load these values exclusively from environment variables (process.env.COOKIE_SECRET, process.env.CRYPTO_KEY) and ensure they are never committed to version control.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "Missing Function-Level Access Control on Benefits Endpoint",
+      "cwe": "CWE-285",
+      "severity": "HIGH",
+      "owasp": "A01:2021",
+      "file": "app/routes/index.js",
+      "line": 47,
+      "description": "The /benefits GET and POST routes only require isLoggedIn, not isAdmin. Any authenticated non-admin user can view and modify benefit start dates for all other users. The commented-out fix correctly adds the isAdmin middleware. Fix: uncomment the isAdmin middleware on both /benefits routes.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Sensitive Data (SSN, DOB, Bank Details) Stored Unencrypted",
+      "cwe": "CWE-311",
+      "severity": "HIGH",
+      "owasp": "A02:2021",
+      "file": "app/data/profile-dao.js",
+      "line": 60,
+      "description": "Social Security Numbers (SSN), dates of birth (DOB), bank account numbers, and routing numbers are stored in MongoDB in plaintext. The encryption code using AES-256 is present but commented out. If the database is compromised, highly sensitive PII is immediately exposed. Fix: uncomment the encrypt/decrypt helpers and apply them to ssn and dob fields before storing, and extend encryption to bankAcc and bankRouting.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "CSRF Protection Disabled",
+      "cwe": "CWE-352",
+      "severity": "HIGH",
+      "owasp": "A01:2021",
+      "file": "server.js",
+      "line": 6,
+      "description": "The csurf CSRF protection middleware is explicitly commented out. All state-changing POST endpoints (/profile, /contributions, /benefits, /memos) are vulnerable to Cross-Site Request Forgery attacks. An attacker can trick an authenticated user's browser into submitting malicious requests to any of these endpoints. Fix: uncomment the csrf() middleware and the csrftoken template local, and add the token to all HTML forms.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Session Cookie Missing HttpOnly and Secure Flags",
+      "cwe": "CWE-614",
+      "severity": "HIGH",
+      "owasp": "A05:2021",
+      "file": "server.js",
+      "line": 62,
+      "description": "The express-session cookie is configured without httpOnly: true or secure: true. Without httpOnly, the session cookie is accessible to JavaScript and can be stolen via XSS. Without secure, the cookie is transmitted over unencrypted HTTP. The commented-out fix shows the correct configuration. Fix: uncomment the cookie block setting httpOnly: true and secure: true (with HTTPS enforced).",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Security Headers Disabled (X-Powered-By, CSP, HSTS, Frameguard)",
+      "cwe": "CWE-693",
+      "severity": "MEDIUM",
+      "owasp": "A05:2021",
+      "file": "server.js",
+      "line": 36,
+      "description": "The helmet middleware providing critical security headers (Content-Security-Policy, HSTS, X-Frame-Options/frameguard, noCache, X-Powered-By removal) is entirely commented out. The application exposes its framework via X-Powered-By, is vulnerable to clickjacking, and provides no CSP to mitigate XSS. Fix: uncomment the helmet middleware block and configure appropriate options for the production environment.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Log Injection (CRLF Injection)",
+      "cwe": "CWE-117",
+      "severity": "MEDIUM",
+      "owasp": "A09:2021",
+      "file": "app/routes/session.js",
+      "line": 52,
+      "description": "The userName value from the login request is logged directly without sanitization: console.log('Error: attempt to login with invalid user: ', userName). An attacker can inject newline characters (\\r\\n) into the username to forge log entries, potentially masking attacks or injecting false audit records. Fix: encode the username before logging using ESAPI or replace newline characters: userName.replace(/(\\r\\n|\\r|\\n)/g, '_').",
+      "category": "Injection"
+    },
+    {
+      "vulnerability": "Username Enumeration via Distinct Error Messages",
+      "cwe": "CWE-204",
+      "severity": "MEDIUM",
+      "owasp": "A07:2021",
+      "file": "app/routes/session.js",
+      "line": 60,
+      "description": "The login handler returns 'Invalid username' for non-existent users and 'Invalid password' for wrong passwords. This allows attackers to enumerate valid usernames by observing the different error messages. Fix: return a single generic error message such as 'Invalid username and/or password' for both cases (the correct message is defined but commented out).",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Full Error Details Exposed to Client",
+      "cwe": "CWE-209",
+      "severity": "MEDIUM",
+      "owasp": "A05:2021",
+      "file": "app/routes/error.js",
+      "line": 9,
+      "description": "The error handling middleware passes the raw err object directly to the error-template view: res.render('error-template', { error: err }). Depending on how the template renders this object, stack traces, internal file paths, database error messages, and other sensitive implementation details may be disclosed to users. Fix: log the full error server-side only, and pass only a generic user-facing message to the template.",
+      "category": "Auth"
+    },
+    {
+      "vulnerability": "Application Configuration Logged at Startup",
+      "cwe": "CWE-532",
+      "severity": "MEDIUM",
+      "owasp": "A09:2021",
+      "file": "config/config.js",
+      "line": 10,
+      "description": "The entire application configuration object, including cookieSecret and cryptoKey, is printed to stdout via console.log(util.inspect(config, false, null)) at every application startup. In environments where logs are collected and stored (CI, cloud platforms, log aggregators), these secrets will be persisted in log storage. Fix: remove the console.log of the full config, or redact sensitive keys before logging.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "ReDoS \u2014 Catastrophic Backtracking in Bank Routing Regex",
+      "cwe": "CWE-1333",
+      "severity": "MEDIUM",
+      "owasp": "A06:2021",
+      "file": "app/routes/profile.js",
+      "line": 38,
+      "description": "The regex /([0-9]+)+\\#/ applied to the bankRouting input contains nested quantifiers that cause catastrophic backtracking. An attacker can submit an input like '111111111111111111111111111X' (many digits without a trailing #) to cause exponential CPU consumption, effectively denying service to other users. The comment in the code acknowledges this vulnerability and provides the fix. Fix: change the regex to /([0-9]+)\\#/ (remove the outer + quantifier) or use a non-backtracking approach.",
+      "category": "Injection"
+    },
+    {
+      "vulnerability": "Plaintext Passwords in Database Seed Script",
+      "cwe": "CWE-256",
+      "severity": "MEDIUM",
+      "owasp": "A02:2021",
+      "file": "artifacts/db-reset.js",
+      "line": 16,
+      "description": "The database seed script inserts users with plaintext passwords ('Admin_123', 'User1_123', 'User2_123') directly. The bcrypt-hashed equivalents are present but commented out. If this script is run against a production or staging database, accounts are created with plaintext-stored credentials. Fix: uncomment the bcrypt-hashed password values and remove the plaintext password lines.",
+      "category": "Crypto"
+    },
+    {
+      "vulnerability": "Application Served Over HTTP Only (No HTTPS)",
+      "cwe": "CWE-319",
+      "severity": "MEDIUM",
+      "owasp": "A02:2021",
+      "file": "server.js",
+      "line": 21,
+      "description": "The HTTPS server configuration using Node's https module with TLS certificates is entirely commented out. The application runs over plain HTTP, exposing all session cookies, credentials, and sensitive PII (SSN, bank details) to network interception. Fix: uncomment the HTTPS setup code, obtain valid TLS certificates, and redirect all HTTP traffic to HTTPS.",
+      "category": "Crypto"
+    }
+  ],
+  "analyzer": "anthropic-api-claude-sonnet-4-6",
+  "timestamp": "2026-05-08T17:54:19.058308+00:00"
+}
