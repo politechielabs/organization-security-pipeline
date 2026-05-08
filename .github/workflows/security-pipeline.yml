@@ -1,0 +1,278 @@
+name: Security Pipeline
+
+
+on:
+  workflow_call:
+    secrets:
+      CLAUDE_API_KEY:
+        required: true
+      SEMGREP_RULES_REPO:
+        required: false   # org/repo of shared Semgrep rules repo
+      RULES_REPO_TOKEN:
+        required: false   # PAT with write access to SEMGREP_RULES_REPO
+
+  pull_request:
+    branches: [main, staging, dev]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+# ─── Checkout pattern used by all scan jobs ───────────────────────────────────
+# Step 1: Checkout CALLER's code → default workspace (GITHUB_WORKSPACE)
+# Step 2: Checkout security_rep  → .security-tools/
+#
+# Scripts:  python .security-tools/scripts/ci/<script>.py
+# Configs:  .security-tools/scripts/config/
+#           .security-tools/scripts/gitleaks.toml
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # L1 · Gitleaks — Secrets & Credentials
+  # Blocks immediately on any secret/credential leak.
+  # ────────────────────────────────────────────────────────────────────────────
+  l1-gitleaks:
+    name: "L1 · Gitleaks — Secrets"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout security tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.workflow_repository }}
+          ref: ${{ github.workflow_sha }}
+          path: .security-tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .security-tools/scripts/gitleaks.toml
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # L2 · Trivy — SCA / CVE / Misconfigs
+  # Blocks on CRITICAL or HIGH vulnerabilities in dependencies / IaC.
+  # ────────────────────────────────────────────────────────────────────────────
+  l2-trivy:
+    name: "L2 · Trivy — SCA / CVE"
+    runs-on: ubuntu-latest
+    needs: l1-gitleaks
+
+    steps:
+      - name: Checkout target code
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: false
+
+      - name: Upload Trivy SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # L3 · Semgrep — SAST (diff-aware)
+  # Scans only changed source files. Blocks on ERROR-severity findings.
+  # Pulls latest rules from SEMGREP_RULES_REPO secret if configured.
+  # ────────────────────────────────────────────────────────────────────────────
+  l3-semgrep:
+    name: "L3 · Semgrep — SAST"
+    runs-on: ubuntu-latest
+    needs: l2-trivy
+
+    steps:
+      - name: Checkout target code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout security tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.workflow_repository }}
+          ref: ${{ github.workflow_sha }}
+          path: .security-tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Identify changed source files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '\.(py|js|ts|jsx|tsx|java|go|rb|php|cs|swift|kt|rs|sh|bash|sql|yml|yaml|toml|xml|cfg|ini|json)$' \
+            | while read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done \
+            > /tmp/semgrep_targets.txt
+
+          echo "Files queued for Semgrep ($(wc -l < /tmp/semgrep_targets.txt)):"
+          cat /tmp/semgrep_targets.txt
+
+      - name: Pull external Semgrep rules
+        if: ${{ secrets.SEMGREP_RULES_REPO != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone --depth=1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ secrets.SEMGREP_RULES_REPO }}" \
+            /tmp/semgrep-rules-external \
+            || echo "Warning: external rules repo unavailable — using custom rules only"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep
+        run: |
+          if [ ! -s /tmp/semgrep_targets.txt ]; then
+            echo "No relevant files changed — skipping Semgrep"
+            printf '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"semgrep","rules":[]}},"results":[]}]}\n' \
+              > semgrep-results.sarif
+            exit 0
+          fi
+
+          CONFIG_FLAGS="--config .security-tools/scripts/config/semgrep-custom-rules.yml"
+          [ -d /tmp/semgrep-rules-external ] && \
+            CONFIG_FLAGS="$CONFIG_FLAGS --config /tmp/semgrep-rules-external"
+
+          mapfile -t TARGET_FILES < /tmp/semgrep_targets.txt
+
+          semgrep $CONFIG_FLAGS \
+            --severity ERROR \
+            --exit-code 1 \
+            --sarif --output semgrep-results.sarif \
+            "${TARGET_FILES[@]}"
+
+      - name: Upload Semgrep SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # L4 · Claude — Semantic Triage
+  # Analyzes changed files for vulnerabilities that rule-based tools miss.
+  # Blocks on CRITICAL or HIGH findings. Posts a summary comment on the PR.
+  # ────────────────────────────────────────────────────────────────────────────
+  l4-claude:
+    name: "L4 · Claude — Semantic Review"
+    runs-on: ubuntu-latest
+    needs: l3-semgrep
+
+    steps:
+      - name: Checkout target code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout security tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.workflow_repository }}
+          ref: ${{ github.workflow_sha }}
+          path: .security-tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get changed files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            > /tmp/all_changed.txt
+          echo "Changed files ($(wc -l < /tmp/all_changed.txt)):"
+          cat /tmp/all_changed.txt
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install anthropic
+
+      - name: Claude semantic analysis
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: python .security-tools/scripts/ci/l4_claude_ci.py
+
+      - name: Upload findings artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l4-findings-${{ github.run_id }}
+          path: /tmp/ci_findings.json
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Generate Semgrep Rules for Gaps
+  # Runs after L3+L4 (regardless of L4 outcome) to generate new Semgrep rules
+  # for CRITICAL/HIGH findings not covered by existing rules.
+  # If SEMGREP_RULES_REPO + RULES_REPO_TOKEN set → creates PR in that repo.
+  # Otherwise → uploads generated rules as artifact for manual review.
+  # Skipped for security/ branches to prevent rule-generation loops.
+  # ────────────────────────────────────────────────────────────────────────────
+  generate-rules:
+    name: "Generate Semgrep Rules for Gaps"
+    runs-on: ubuntu-latest
+    needs: [l3-semgrep, l4-claude]
+    if: |
+      always() &&
+      !startsWith(github.head_ref, 'security/') &&
+      needs.l3-semgrep.result == 'success' &&
+      (needs.l4-claude.result == 'success' || needs.l4-claude.result == 'failure')
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout security tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.workflow_repository }}
+          ref: ${{ github.workflow_sha }}
+          path: .security-tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download L4 findings
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: l4-findings-${{ github.run_id }}
+          path: /tmp/
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install anthropic pyyaml
+
+      - name: Generate Semgrep rules
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          SEMGREP_RULES_REPO: ${{ secrets.SEMGREP_RULES_REPO }}
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python .security-tools/scripts/ci/generate_rules_ci.py
+
+      - name: Upload generated rules artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-semgrep-rules-${{ github.run_id }}
+          path: /tmp/generated_rules.yml
+          retention-days: 14
+          if-no-files-found: ignore

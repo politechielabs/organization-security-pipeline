@@ -1,0 +1,1463 @@
+rules:
+- id: custom.gap-jwt-token-forgery-kotlin
+  languages:
+  - kotlin
+  message: Insecure JWT handling detected in Kotlin. Calling parse() without signature
+    verification, using algorithm "none", or decoding without verification allows
+    attackers to forge tokens and impersonate users. Always use parseClaimsJws() with
+    a signing key and restrict accepted algorithms (CWE-347, CWE-345, CWE-290).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-347|CWE-345|CWE-290
+    subcategory: JWT Token Forgery
+  pattern-either:
+  - pattern: Jwts.parser().parse($TOKEN)
+  - pattern: Jwts.parserBuilder().build().parse($TOKEN)
+  - pattern: Jwts.parserBuilder().build().parseClaimsJwt($TOKEN)
+  - pattern: JWT.decode($TOKEN)
+  - pattern: $PARSER.setSigningKey("...")
+  - pattern: Jwts.builder().signWith($ALG, "...")
+  severity: CRITICAL
+- id: custom.gap-jwt-token-forgery-xml
+  languages:
+  - xml
+  message: A JWT secret or token value appears to be stored as a plain-text Android
+    string resource. Hardcoding secrets in XML resources exposes them to anyone who
+    decompiles the APK. Store secrets server-side or use Android Keystore (CWE-347,
+    CWE-321, CWE-290).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-347|CWE-345|CWE-290
+    subcategory: JWT Token Forgery
+  pattern-either:
+  - pattern: '<string name="jwt_secret">...</string>
+
+      '
+  - pattern: '<string name="jwt_key">...</string>
+
+      '
+  - pattern: '<string name="jwt_token">...</string>
+
+      '
+  severity: MEDIUM
+- id: custom.gap-ace-third-party-libs-kotlin
+  languages:
+  - kotlin
+  message: Arbitrary code execution risk via dynamic class loading or shell execution.
+    DexClassLoader, PathClassLoader, Runtime.exec, and reflective invocation can execute
+    attacker-controlled code if inputs are not strictly validated. Use only trusted,
+    pinned library sources and avoid dynamic code loading at runtime (CWE-94, CWE-78,
+    CWE-829, CWE-502).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-94|CWE-78|CWE-829|CWE-502
+    subcategory: Arbitrary Code Execution via third party libs
+  pattern-either:
+  - pattern: DexClassLoader($PATH, ...)
+  - pattern: PathClassLoader($PATH, ...)
+  - pattern: Runtime.getRuntime().exec(...)
+  - pattern: ProcessBuilder($CMD)
+  - pattern: Class.forName($CLASS)
+  - pattern: ObjectInputStream($STREAM).readObject()
+  - pattern: $METHOD.invoke($OBJ, ...)
+  severity: CRITICAL
+- id: custom.gap-ace-third-party-libs-xml
+  languages:
+  - xml
+  message: The AndroidManifest declares permissions or features that enable installation
+    of packages or loading of native/dynamic code from external sources. This increases
+    the attack surface for arbitrary code execution via malicious third-party libraries
+    (CWE-94, CWE-829).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-94|CWE-78|CWE-829|CWE-502
+    subcategory: Arbitrary Code Execution via third party libs
+  pattern-either:
+  - pattern: '<uses-permission android:name="android.permission.INSTALL_PACKAGES"
+      .../>
+
+      '
+  - pattern: '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+      .../>
+
+      '
+  - pattern: '<uses-feature android:name="android.hardware.type.embedded" .../>
+
+      '
+  severity: HIGH
+- id: custom.gap-insecure-content-provider-kotlin
+  languages:
+  - kotlin
+  message: A ContentProvider is queried or mutated without enforcing caller permissions.
+    Exported providers accessible to any app can leak or corrupt sensitive data. Check
+    enforceCallingPermission() or declare read/write permissions on the provider (CWE-926,
+    CWE-925, CWE-284).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-925|CWE-284
+    subcategory: Insecure Content Provider
+  pattern-either:
+  - pattern: 'context.contentResolver.query($URI, ...)
+
+      '
+  - pattern: 'context.contentResolver.insert($URI, ...)
+
+      '
+  - pattern: 'context.contentResolver.update($URI, ...)
+
+      '
+  - pattern: 'context.contentResolver.delete($URI, ...)
+
+      '
+  - pattern: enforceCallingOrSelfPermission(null, ...)
+  - pattern: enforceCallingOrSelfUriPermission($URI, 0, ...)
+  severity: HIGH
+- id: custom.gap-insecure-content-provider-xml
+  languages:
+  - xml
+  message: A ContentProvider is exported without android:permission, android:readPermission,
+    or android:writePermission. Any installed application can read or write its data.
+    Add explicit permissions to restrict access (CWE-926, CWE-925, CWE-284).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-925|CWE-284
+    subcategory: Insecure Content Provider
+  pattern: '<provider android:exported="true" ...>...</provider>
+
+    '
+  severity: HIGH
+- id: custom.gap-predictable-endpoints-kotlin
+  languages:
+  - kotlin
+  message: Predictable or sequential identifiers used in URI or endpoint construction
+    allow attackers to enumerate resources via IDOR. Use cryptographically random
+    UUIDs (UUID.randomUUID()) and enforce server-side authorization checks on every
+    request (CWE-330, CWE-284, CWE-425).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-330|CWE-284|CWE-425
+    subcategory: Predictable Endpoints
+  pattern-either:
+  - pattern: Uri.parse(".../$ID")
+  - pattern: 'val $URL = "$BASE/" + $ID
+
+      '
+  - pattern: 'val $URL = "$BASE/" + $COUNTER++
+
+      '
+  - pattern: Random().nextInt(...)
+  - pattern: System.currentTimeMillis()
+  severity: MEDIUM
+- id: custom.gap-predictable-endpoints-xml
+  languages:
+  - xml
+  message: A deep-link intent-filter exposes a URI pattern that may allow unauthenticated
+    or predictable access to internal app screens. Validate all deep-link parameters
+    server-side and require authentication before acting on them (CWE-330, CWE-425).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-330|CWE-284|CWE-425
+    subcategory: Predictable Endpoints
+  pattern-either:
+  - pattern: '<data android:scheme="http" .../>
+
+      '
+  - pattern: '<data android:scheme="https" android:host="*" .../>
+
+      '
+  - pattern: '<action android:name="android.intent.action.VIEW" .../>
+
+      '
+  severity: MEDIUM
+- id: custom.gap-unprotected-data-uri-webview-kotlin
+  languages:
+  - kotlin
+  message: 'WebView loads a data: URI or has file-system access enabled without restriction.
+    Attackers who control the URL can execute arbitrary JavaScript or read local files.
+    Disable setAllowFileAccess, setAllowUniversalAccessFromFileURLs, and validate
+    any URL before loading (CWE-79, CWE-200).'
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-79|CWE-200
+    subcategory: Unprotected Data URIs in Webview
+  pattern-either:
+  - pattern: $WV.loadUrl("data:...")
+  - pattern: $WV.loadDataWithBaseURL($BASE, ...)
+  - pattern: $WV.settings.allowFileAccess = true
+  - pattern: $WV.settings.allowUniversalAccessFromFileURLs = true
+  - pattern: $WV.settings.allowFileAccessFromFileURLs = true
+  - pattern: $WV.settings.javaScriptEnabled = true
+  - pattern: $WV.loadUrl($URL)
+  severity: HIGH
+- id: custom.gap-unprotected-data-uri-webview-xml
+  languages:
+  - xml
+  message: 'A WebView Activity or component is exported or declared without input-validation
+    safeguards. Exported WebView components can be driven by third-party apps to load
+    attacker-controlled data: or file: URIs (CWE-79, CWE-200).'
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-79|CWE-200
+    subcategory: Unprotected Data URIs in Webview
+  pattern: '<activity android:exported="true" ...>...</activity>
+
+    '
+  severity: HIGH
+- id: custom.gap-local-file-theft-chooser-kotlin
+  languages:
+  - kotlin
+  message: An Intent created with a raw file:// URI or via Uri.fromFile() is passed
+    to a chooser or sent to external apps. Any receiving app gains read access to
+    that local file path. Use FileProvider.getUriForFile() with a narrow file_paths.xml
+    configuration and grant-uri-permissions flags instead (CWE-22, CWE-200).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-22|CWE-200
+    subcategory: Theft of Local Files via ChooserActivity
+  pattern-either:
+  - pattern: Uri.fromFile($FILE)
+  - pattern: Intent.createChooser($INTENT, ...)
+  - pattern: '$INTENT.setData(Uri.fromFile($FILE))
+
+      '
+  - pattern: '$INTENT.putExtra($KEY, Uri.fromFile($FILE))
+
+      '
+  - pattern: FileProvider.getUriForFile($CTX, $AUTH, $FILE)
+  severity: HIGH
+- id: custom.gap-local-file-theft-chooser-xml
+  languages:
+  - xml
+  message: A ChooserActivity or file-sharing Activity is exported without restricting
+    the URI schemes it accepts. This can allow third-party apps to trigger file selection
+    over arbitrary local paths and exfiltrate device files (CWE-22, CWE-200).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-22|CWE-200
+    subcategory: Theft of Local Files via ChooserActivity
+  pattern-either:
+  - pattern: '<activity android:name="android.intent.action.CHOOSER" ...>...</activity>
+
+      '
+  - pattern: '<data android:scheme="file" .../>
+
+      '
+  severity: HIGH
+- id: custom.gap-insecure-broadcast-receiver-kotlin
+  languages:
+  - kotlin
+  message: A BroadcastReceiver is registered or a broadcast is sent without enforcing
+    a permission. Any application can send malicious intents to an unprotected receiver
+    or intercept unprotected broadcasts. Always specify a permission string in registerReceiver()
+    and sendBroadcast() calls (CWE-926, CWE-284).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-284
+    subcategory: Insecure Broadcast Receiver
+  pattern-either:
+  - pattern: registerReceiver($RECEIVER, $FILTER)
+  - pattern: registerReceiver($RECEIVER, $FILTER, null, ...)
+  - pattern: sendBroadcast($INTENT)
+  - pattern: sendOrderedBroadcast($INTENT, null)
+  - pattern: LocalBroadcastManager.getInstance($CTX).registerReceiver(...)
+  severity: HIGH
+- id: custom.gap-insecure-broadcast-receiver-xml
+  languages:
+  - xml
+  message: A BroadcastReceiver is declared with android:exported="true" and no android:permission
+    attribute. Any application on the device can send it arbitrary intents. Add a
+    signature-level or custom permission to restrict access (CWE-926, CWE-284).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-284
+    subcategory: Insecure Broadcast Receiver
+  pattern: '<receiver android:exported="true" ...>...</receiver>
+
+    '
+  severity: HIGH
+- id: custom.gap-insecure-fileprovider-paths-kotlin
+  languages:
+  - kotlin
+  message: FileProvider.getUriForFile() is used to share files. If the backing file_paths.xml
+    exposes root-path or an overly broad directory, any file on the device can be
+    shared with external apps. Scope file_paths.xml to the minimum required directories
+    and filenames (CWE-22, CWE-552).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-22|CWE-552
+    subcategory: Insecure use of FileProvider Paths
+  pattern-either:
+  - pattern: FileProvider.getUriForFile($CTX, $AUTHORITY, $FILE)
+  - pattern: '$INTENT.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+      '
+  - pattern: '$INTENT.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+
+      '
+  severity: HIGH
+- id: custom.gap-insecure-fileprovider-paths-xml
+  languages:
+  - xml
+  message: The FileProvider paths configuration exposes a root-path, external-path,
+    or files-path with a broad path="/". This grants access to the entire storage
+    area. Restrict each path entry to the narrowest required directory (CWE-22, CWE-552).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-22|CWE-552
+    subcategory: Insecure use of FileProvider Paths
+  pattern-either:
+  - pattern: '<root-path name="..." path="..." .../>
+
+      '
+  - pattern: '<external-path name="..." path="/" .../>
+
+      '
+  - pattern: '<files-path name="..." path="/" .../>
+
+      '
+  - pattern: '<cache-path name="..." path="/" .../>
+
+      '
+  - pattern: '<external-files-path name="..." path="/" .../>
+
+      '
+  severity: HIGH
+- id: custom.gap-implicit-intent-sensitive-data-kotlin
+  languages:
+  - kotlin
+  message: An implicit Intent is created and sensitive data (credentials, tokens,
+    or PII) is attached as an extra. Any app that registers a matching intent-filter
+    can intercept this broadcast and read the sensitive payload. Use explicit Intents
+    with a specific component or use LocalBroadcastManager for intra-app communication
+    (CWE-926, CWE-200).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-200
+    subcategory: Implicit Intent with sensitive data
+  pattern-either:
+  - pattern: 'val $INTENT = Intent($ACTION)
+
+      ...
+
+      $INTENT.putExtra($KEY, $PASSWORD)
+
+      '
+  - pattern: 'Intent($ACTION).putExtra($KEY, $VAL)
+
+      '
+  - patterns:
+    - pattern: $INTENT.putExtra($KEY, $VAL)
+    - pattern-not: $INTENT.setComponent(...)
+    - pattern-not: $INTENT.setClass(...)
+    - pattern-not: $INTENT.setClassName(...)
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i).*(password|passwd|token|secret|credential|auth|apikey|api_key|ssn|pin).*
+  severity: HIGH
+- id: custom.gap-implicit-intent-sensitive-data-xml
+  languages:
+  - xml
+  message: An activity or receiver is exported and declares an implicit intent-filter
+    without restricting access. Any external application can send intents to this
+    component and potentially extract sensitive data. Set android:exported="false"
+    or add permission enforcement (CWE-926, CWE-200).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-926|CWE-200
+    subcategory: Implicit Intent with sensitive data
+  pattern-either:
+  - pattern: "<receiver android:exported=\"true\" ...>\n  <intent-filter>...</intent-filter>\n\
+      </receiver>\n"
+  - pattern: "<activity android:exported=\"true\" ...>\n  <intent-filter>...</intent-filter>\n\
+      </activity>\n"
+  severity: HIGH
+- id: custom.gap-implicit-intent-arbitrary-url-kotlin
+  languages:
+  - kotlin
+  message: 'An implicit Intent with ACTION_VIEW is constructed using an unvalidated
+    URL sourced from an incoming Intent or external input. A malicious app can intercept
+    this intent or supply a javascript: / file: scheme URL, leading to open redirect
+    or arbitrary code execution in a WebView (CWE-601, CWE-926).'
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-601|CWE-926
+    subcategory: Intercepting Implicit Intent to load arbitrary URL
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: Intent(Intent.ACTION_VIEW, Uri.parse($URL))
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: $INTENT.setData(Uri.parse($URL))
+    - focus-metavariable: $URL
+  - patterns:
+    - pattern: $WEBVIEW.loadUrl($URL)
+    - focus-metavariable: $URL
+  pattern-sources:
+  - pattern: intent.getStringExtra(...)
+  - pattern: intent.data
+  - pattern: intent.dataString
+  - pattern: $INTENT.getStringExtra(...)
+  - pattern: $INTENT.data
+  severity: HIGH
+- id: custom.gap-implicit-intent-arbitrary-url-xml
+  languages:
+  - xml
+  message: An activity exposes a broad intent-filter accepting VIEW actions on http/https
+    schemes without restricting the host. A malicious app can fire an implicit Intent
+    to this component and supply an attacker-controlled URL, enabling open redirect
+    (CWE-601, CWE-926). Restrict the host with android:host or use an explicit Intent.
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-601|CWE-926
+    subcategory: Intercepting Implicit Intent to load arbitrary URL
+  pattern: "<intent-filter>\n  <action android:name=\"android.intent.action.VIEW\"\
+    \ />\n  <data android:scheme=\"http\" />\n</intent-filter>\n"
+  severity: MEDIUM
+- id: custom.gap-insecure-logging-credentials-kotlin
+  languages:
+  - kotlin
+  message: Sensitive data such as passwords, tokens, or credentials is being written
+    to the Android system log. Device logs can be read by other apps with READ_LOGS
+    permission or via adb. Remove logging of sensitive fields in production builds
+    and use obfuscated/sanitized log messages (CWE-312, CWE-359).
+  metadata:
+    category: Mobile App Security
+    cwe: unknown
+    subcategory: Insecure Logging of Credentials
+  pattern-either:
+  - patterns:
+    - pattern: Log.$LEVEL($TAG, $MSG)
+    - metavariable-regex:
+        metavariable: $MSG
+        regex: (?i).*(password|passwd|token|secret|credential|auth|apikey|api_key|pin|ssn).*
+  - patterns:
+    - pattern: Log.$LEVEL($TAG, $MSG)
+    - metavariable-regex:
+        metavariable: $TAG
+        regex: (?i).*(password|passwd|token|secret|credential|auth|apikey|pin).*
+  - pattern: Log.$LEVEL($TAG, "..." + $PASSWORD + "...")
+  - pattern: println($CRED)
+  severity: HIGH
+- id: custom.gap-insecure-logging-credentials-xml
+  languages:
+  - xml
+  message: The AndroidManifest sets android:debuggable="true", which enables verbose
+    logging and allows adb access to the application sandbox. Sensitive data written
+    to logcat becomes accessible to any app with READ_LOGS. Ensure debuggable is false
+    in production builds (CWE-312).
+  metadata:
+    category: Mobile App Security
+    cwe: unknown
+    subcategory: Insecure Logging of Credentials
+  pattern: '<application android:debuggable="true" ...>...</application>
+
+    '
+  severity: MEDIUM
+- id: custom.gap-null-byte-bypass-js
+  languages:
+  - javascript
+  - typescript
+  message: User-supplied input is used in registration or validation logic without
+    stripping null bytes or checking for empty/whitespace-only values. Attackers can
+    bypass uniqueness checks or inject a null byte to truncate strings at the filesystem
+    or database layer. Validate, trim, and reject inputs containing null bytes (CWE-20,
+    CWE-158).
+  metadata:
+    category: Improper Input Validation
+    cwe: CWE-20|CWE-158
+    subcategory: Empty user registration or poison null byte bypass
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.findOne($QUERY)
+    - focus-metavariable: $QUERY
+  - patterns:
+    - pattern: $DB.find($QUERY)
+    - focus-metavariable: $QUERY
+  - patterns:
+    - pattern: $DB.create($DATA)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: $MODEL.findOrCreate($OPTS)
+    - focus-metavariable: $OPTS
+  pattern-sources:
+  - pattern: req.body.$FIELD
+  - pattern: req.query.$FIELD
+  - pattern: req.params.$FIELD
+  severity: HIGH
+- id: custom.gap-null-byte-bypass-python
+  languages:
+  - python
+  message: User-supplied input flows into a database query or file operation without
+    null-byte stripping or empty-string validation. Attackers can register empty usernames
+    or inject null bytes to bypass uniqueness and length constraints (CWE-20, CWE-158).
+  metadata:
+    category: Improper Input Validation
+    cwe: CWE-20|CWE-158
+    subcategory: Empty user registration or poison null byte bypass
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $MODEL.objects.get($QUERY)
+    - focus-metavariable: $QUERY
+  - patterns:
+    - pattern: $MODEL.objects.filter($QUERY)
+    - focus-metavariable: $QUERY
+  - patterns:
+    - pattern: $MODEL.objects.create($DATA)
+    - focus-metavariable: $DATA
+  - patterns:
+    - pattern: $SESSION[$KEY] = $VAL
+    - focus-metavariable: $VAL
+  pattern-sources:
+  - pattern: request.form.get(...)
+  - pattern: request.args.get(...)
+  - pattern: request.json.get(...)
+  - pattern: request.data
+  severity: HIGH
+- id: custom.gap-null-byte-bypass-yaml
+  languages:
+  - yaml
+  message: A configuration entry appears to allow empty or null values for fields
+    that should be required (such as username, password, or role). This can enable
+    null-byte or empty-registration bypasses at runtime (CWE-20, CWE-158).
+  metadata:
+    category: Improper Input Validation
+    cwe: CWE-20|CWE-158
+    subcategory: Empty user registration or poison null byte bypass
+  pattern-either:
+  - pattern: "validation:\n  required: false\n"
+  - pattern: 'allow_empty: true
+
+      '
+  - pattern: 'minLength: 0
+
+      '
+  severity: MEDIUM
+- id: custom.gap-null-byte-bypass-xml
+  languages:
+  - xml
+  message: A validation constraint in configuration allows empty or zero-length input
+    for a sensitive field. Attackers may exploit this to register empty usernames
+    or bypass field uniqueness checks (CWE-20, CWE-158).
+  metadata:
+    category: Improper Input Validation
+    cwe: CWE-20|CWE-158
+    subcategory: Empty user registration or poison null byte bypass
+  pattern-either:
+  - pattern: '<field name="..." required="false" />
+
+      '
+  - pattern: '<constraint type="NotBlank" enabled="false" />
+
+      '
+  - pattern: '<validation minlength="0" />
+
+      '
+  severity: MEDIUM
+- id: custom.gap-ssti-js
+  languages:
+  - javascript
+  - typescript
+  message: User-controlled input is passed directly to a server-side template rendering
+    function. An attacker can inject template directives to execute arbitrary code
+    on the server (CWE-94, CWE-1336). Never render untrusted input as a template string;
+    pass it as data context only.
+  metadata:
+    category: Injection
+    cwe: CWE-94|CWE-1336
+    subcategory: Dynamic SSTi (server template injection)
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $NUNJUCKS.renderString($TMPL, ...)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: $EJS.render($TMPL, ...)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: $HANDLEBARS.compile($TMPL)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: $PUG.render($TMPL, ...)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: $LODASH.template($TMPL)
+    - focus-metavariable: $TMPL
+  pattern-sources:
+  - pattern: req.body.$INPUT
+  - pattern: req.query.$INPUT
+  - pattern: req.params.$INPUT
+  severity: CRITICAL
+- id: custom.gap-ssti-python
+  languages:
+  - python
+  message: User-controlled input is passed to a template engine's render or from_string
+    method. Attackers can inject Jinja2/Mako/Chameleon directives to read files or
+    execute arbitrary code (CWE-94, CWE-1336). Pass user data only as template variables,
+    never as the template string itself.
+  metadata:
+    category: Injection
+    cwe: CWE-94|CWE-1336
+    subcategory: Dynamic SSTi (server template injection)
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: jinja2.Environment(...).from_string($TMPL)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: jinja2.Template($TMPL)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: Template($TMPL).render(...)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: render_template_string($TMPL, ...)
+    - focus-metavariable: $TMPL
+  - patterns:
+    - pattern: mako.template.Template($TMPL)
+    - focus-metavariable: $TMPL
+  pattern-sources:
+  - pattern: request.args.get(...)
+  - pattern: request.form.get(...)
+  - pattern: request.json.get(...)
+  severity: CRITICAL
+- id: custom.gap-ssti-yaml
+  languages:
+  - yaml
+  message: A configuration value uses a Go/Helm/Jinja2 template expression that may
+    interpolate unsanitized external input. Template injection in pipeline or Helm
+    chart configuration can lead to code execution during rendering (CWE-94, CWE-1336).
+  metadata:
+    category: Injection
+    cwe: CWE-94|CWE-1336
+    subcategory: Dynamic SSTi (server template injection)
+  pattern-either:
+  - pattern: 'template: "{{- $VAR }}"
+
+      '
+  - pattern: 'value: "{{ $INPUT }}"
+
+      '
+  - pattern: 'content: "{% $BLOCK %}"
+
+      '
+  severity: HIGH
+- id: custom.gap-ssti-xml
+  languages:
+  - xml
+  message: An XML configuration attribute or element value contains a template expression
+    that may interpolate user-supplied input. If the template engine renders these
+    values with unsanitized data, server-side template injection is possible (CWE-94,
+    CWE-1336).
+  metadata:
+    category: Injection
+    cwe: CWE-94|CWE-1336
+    subcategory: Dynamic SSTi (server template injection)
+  pattern-either:
+  - pattern: '<property name="..." value="${ $EXPR }" />
+
+      '
+  - pattern: '<param name="..." value="${ $EXPR }" />
+
+      '
+  severity: HIGH
+- id: custom.gap-wallet-logic-flaw-js
+  languages:
+  - javascript
+  - typescript
+  message: A wallet balance, score, or financial amount is modified using a value
+    sourced directly from user input without server-side validation or authorization
+    checks. Attackers can supply negative amounts or overflow values to deplete wallets
+    or inflate scores (CWE logic flaw). Always recompute monetary values server-side
+    and enforce range/ownership checks.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $OBJ.balance += $AMOUNT
+    - focus-metavariable: $AMOUNT
+  - patterns:
+    - pattern: $OBJ.balance -= $AMOUNT
+    - focus-metavariable: $AMOUNT
+  - patterns:
+    - pattern: $OBJ.score += $POINTS
+    - focus-metavariable: $POINTS
+  - patterns:
+    - pattern: $OBJ.credits += $AMOUNT
+    - focus-metavariable: $AMOUNT
+  - patterns:
+    - pattern: '$DB.update({balance: $AMOUNT}, ...)'
+    - focus-metavariable: $AMOUNT
+  pattern-sources:
+  - pattern: req.body.$FIELD
+  - pattern: req.query.$FIELD
+  - pattern: req.params.$FIELD
+  severity: HIGH
+- id: custom.gap-wallet-logic-flaw-python
+  languages:
+  - python
+  message: A wallet balance or score value is derived from untrusted user input and
+    written to storage without server-side range validation. Negative amounts or crafted
+    values can deplete wallets or inflate scores (logic flaw). Recompute all financial
+    values server-side and validate ranges strictly.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $OBJ.balance += $AMOUNT
+    - focus-metavariable: $AMOUNT
+  - patterns:
+    - pattern: $OBJ.balance -= $AMOUNT
+    - focus-metavariable: $AMOUNT
+  - patterns:
+    - pattern: $OBJ.score += $POINTS
+    - focus-metavariable: $POINTS
+  - patterns:
+    - pattern: $MODEL.objects.filter(...).update(balance=$AMOUNT)
+    - focus-metavariable: $AMOUNT
+  pattern-sources:
+  - pattern: request.form.get(...)
+  - pattern: request.args.get(...)
+  - pattern: request.json.get(...)
+  severity: HIGH
+- id: custom.gap-wallet-logic-flaw-yaml
+  languages:
+  - yaml
+  message: A configuration entry sets a wallet or scoring limit to zero or a negative
+    value, which may permit balance depletion attacks or unrestricted score accumulation
+    (logic flaw). Enforce positive non-zero lower bounds on all financial and scoring
+    thresholds.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: 'min_balance: 0
+
+      '
+  - pattern: 'max_score: -1
+
+      '
+  - pattern: 'wallet_limit: 0
+
+      '
+  severity: MEDIUM
+- id: custom.gap-wallet-logic-flaw-xml
+  languages:
+  - xml
+  message: A configuration element defines a wallet floor or score maximum as zero
+    or unlimited, which can be exploited for balance-depletion or scoreboard manipulation
+    attacks (logic flaw). Enforce non-zero lower bounds and reasonable upper bounds
+    on all financial and scoring parameters.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: '<property name="minBalance" value="0" />
+
+      '
+  - pattern: '<property name="walletFloor" value="0" />
+
+      '
+  - pattern: '<limit type="score" max="unlimited" />
+
+      '
+  severity: MEDIUM
+- id: custom.gap-captcha-bypass-js
+  languages:
+  - javascript
+  - typescript
+  message: CAPTCHA verification is skipped when a test/debug environment flag is set,
+    or the CAPTCHA response token is never validated server-side before processing
+    the request. An attacker can automate requests by omitting the CAPTCHA token or
+    setting the environment flag. Always verify the CAPTCHA token server-side unconditionally.
+  metadata:
+    category: Broken Anti Automation
+    cwe: unknown
+    subcategory: CAPTCHA bypass or reset robot issues
+  pattern-either:
+  - pattern: "if (process.env.$ENV === \"test\") {\n  ...\n}\n"
+  - patterns:
+    - pattern: "if ($COND) {\n  ...\n  $CAPTCHA.verify(...)\n  ...\n}\n"
+    - metavariable-regex:
+        metavariable: $COND
+        regex: (?i).*(skip|disable|bypass|test|debug).*
+  - pattern: $CAPTCHA = false
+  - patterns:
+    - pattern: $APP.post($ROUTE, $HANDLER)
+    - pattern-not: '$APP.post($ROUTE, ..., $CAPTCHA_MW, ...)
+
+        '
+    - metavariable-regex:
+        metavariable: $ROUTE
+        regex: (?i).*(register|signup|login|reset|forgot).*
+  severity: HIGH
+- id: custom.gap-captcha-bypass-python
+  languages:
+  - python
+  message: CAPTCHA validation is conditionally skipped based on an environment variable
+    or debug flag, or the recaptcha/hcaptcha response is never verified server-side.
+    Automated scripts can exploit this to perform brute-force or mass registration.
+    Enforce CAPTCHA verification unconditionally on all public-facing endpoints.
+  metadata:
+    category: Broken Anti Automation
+    cwe: unknown
+    subcategory: CAPTCHA bypass or reset robot issues
+  pattern-either:
+  - patterns:
+    - pattern: "if os.getenv($FLAG):\n    pass\n"
+    - metavariable-regex:
+        metavariable: $FLAG
+        regex: (?i).*(test|debug|skip|captcha|bypass).*
+  - pattern: CAPTCHA_ENABLED = False
+  - pattern: RECAPTCHA_ENABLED = False
+  - patterns:
+    - pattern: "if $APP.debug:\n    ...\nelse:\n    $CAPTCHA.verify(...)\n"
+  severity: HIGH
+- id: custom.gap-captcha-bypass-yaml
+  languages:
+  - yaml
+  message: A configuration file explicitly disables CAPTCHA or sets it to bypass/test
+    mode. This allows automated bots to interact with protected endpoints without
+    human verification. Enable CAPTCHA enforcement in all non-development environments.
+  metadata:
+    category: Broken Anti Automation
+    cwe: unknown
+    subcategory: CAPTCHA bypass or reset robot issues
+  pattern-either:
+  - pattern: "captcha:\n  enabled: false\n"
+  - pattern: "recaptcha:\n  enabled: false\n"
+  - pattern: "hcaptcha:\n  skip: true\n"
+  - pattern: 'captcha_bypass: true
+
+      '
+  severity: HIGH
+- id: custom.gap-captcha-bypass-xml
+  languages:
+  - xml
+  message: A configuration element disables or bypasses CAPTCHA enforcement. Automated
+    attackers can exploit this absence to perform mass account creation, brute-force
+    login attempts, or automated abuse of sensitive endpoints.
+  metadata:
+    category: Broken Anti Automation
+    cwe: unknown
+    subcategory: CAPTCHA bypass or reset robot issues
+  pattern-either:
+  - pattern: '<property name="captchaEnabled" value="false" />
+
+      '
+  - pattern: '<captcha enabled="false" />
+
+      '
+  - pattern: '<recaptcha enabled="false" />
+
+      '
+  severity: HIGH
+- id: custom.gap-idor-js
+  languages:
+  - javascript
+  - typescript
+  message: A user-supplied identifier is used directly to retrieve or modify a database
+    record without verifying that the authenticated user is authorized to access that
+    resource. An attacker can enumerate or tamper with records belonging to other
+    users by manipulating the ID parameter (CWE-639). Always compare the retrieved
+    record owner against the authenticated session identity.
+  metadata:
+    category: Broken Access Control
+    cwe: unknown
+    subcategory: IDOR via Direct Object Reference
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $DB.findById($ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: '$DB.findOne({_id: $ID})'
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: $DB.findByPk($ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: '$DB.update({id: $ID}, ...)'
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: '$DB.destroy({where: {id: $ID}})'
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: '$MODEL.findOne({id: $ID})'
+    - focus-metavariable: $ID
+  pattern-sources:
+  - pattern: req.params.$ID
+  - pattern: req.query.$ID
+  - pattern: req.body.$ID
+  severity: HIGH
+- id: custom.gap-idor-python
+  languages:
+  - python
+  message: A user-supplied identifier is used directly in a database lookup without
+    an ownership or authorization check. An attacker can access or modify records
+    belonging to other users by enumerating IDs (CWE-639). Always filter queries by
+    both the resource ID and the authenticated user's identity.
+  metadata:
+    category: Broken Access Control
+    cwe: unknown
+    subcategory: IDOR via Direct Object Reference
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: $MODEL.objects.get(id=$ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: $MODEL.objects.get(pk=$ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: $MODEL.objects.filter(id=$ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: $SESSION.query($MODEL).filter_by(id=$ID)
+    - focus-metavariable: $ID
+  - patterns:
+    - pattern: $SESSION.query($MODEL).get($ID)
+    - focus-metavariable: $ID
+  pattern-sources:
+  - pattern: request.args.get(...)
+  - pattern: request.form.get(...)
+  - pattern: request.json.get(...)
+  - pattern: request.view_args.get(...)
+  severity: HIGH
+- id: custom.gap-idor-yaml
+  languages:
+  - yaml
+  message: A configuration entry disables or omits ownership-based access control
+    checks, which can enable Insecure Direct Object Reference vulnerabilities at runtime.
+    Ensure object-level authorization is enforced for all resource endpoints.
+  metadata:
+    category: Broken Access Control
+    cwe: unknown
+    subcategory: IDOR via Direct Object Reference
+  pattern-either:
+  - pattern: "authorization:\n  enabled: false\n"
+  - pattern: 'ownership_check: false
+
+      '
+  - pattern: "access_control:\n  enforce: false\n"
+  severity: MEDIUM
+- id: custom.gap-hardcoded-jwt-secrets-kotlin
+  languages:
+  - kotlin
+  message: Hardcoded JWT signing secret detected in Kotlin source. An attacker with
+    access to source or bytecode can forge arbitrary tokens. Store secrets in environment
+    variables or a secrets manager such as AWS Secrets Manager (CWE-798, CWE-321,
+    CWE-259).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-798|CWE-321|CWE-259
+    subcategory: Hardcoded JWT Secrets
+  pattern-either:
+  - pattern: Jwts.builder().signWith($ALG, "...")
+  - pattern: Jwts.builder().signWith(SignatureAlgorithm.$ALG, "...")
+  - pattern: $PARSER.setSigningKey("...")
+  - pattern: Keys.hmacShaKeyFor("...".toByteArray(...))
+  - pattern: Keys.hmacShaKeyFor("...".toByteArray())
+  severity: CRITICAL
+- id: custom.gap-hardcoded-jwt-secrets-xml
+  languages:
+  - xml
+  message: Hardcoded JWT secret or token found in an XML resource or configuration
+    file. Remove the literal value and load it from a secrets manager at runtime (CWE-798,
+    CWE-321, CWE-259).
+  metadata:
+    category: Authentication & Authorization
+    cwe: CWE-798|CWE-321|CWE-259
+    subcategory: Hardcoded JWT Secrets
+  pattern-either:
+  - pattern-regex: <string\s+name="[^"]*(?:jwt|token|signing)[^"]*">[^<]{8,}</string>
+  - pattern-regex: <property\s+name="[^"]*(?:jwt|jwtSecret|signingKey)[^"]*"\s+value="[^"]{8,}"
+  - pattern-regex: <entry\s+key="[^"]*(?:jwt|signingKey|jwtSecret)[^"]*"\s+value="[^"]{8,}"
+  severity: CRITICAL
+- id: custom.gap-hardcoded-credentials-kotlin
+  languages:
+  - kotlin
+  message: Hardcoded credential (password, secret, or API key) detected in Kotlin
+    source code. Embedding credentials in code exposes them in version control and
+    compiled artifacts. Use Android Keystore, environment variables, or a secrets
+    manager (CWE-798, CWE-259, CWE-321).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-798|CWE-259|CWE-321
+    subcategory: Hardcoded Credentials (InsecureShop)
+  pattern-either:
+  - patterns:
+    - pattern: val $CRED = "..."
+    - metavariable-regex:
+        metavariable: $CRED
+        regex: (?i).*(password|passwd|pwd|secret|apikey|api_key|token|credential|auth_token).*
+  - patterns:
+    - pattern: var $CRED = "..."
+    - metavariable-regex:
+        metavariable: $CRED
+        regex: (?i).*(password|passwd|pwd|secret|apikey|api_key|token|credential|auth_token).*
+  - patterns:
+    - pattern: const val $CRED = "..."
+    - metavariable-regex:
+        metavariable: $CRED
+        regex: (?i).*(password|passwd|pwd|secret|apikey|api_key|token|credential|auth_token).*
+  - pattern: LoginCredentials("...", "...")
+  - pattern: Credentials("...", "...")
+  severity: CRITICAL
+- id: custom.gap-hardcoded-credentials-xml
+  languages:
+  - xml
+  message: Hardcoded credential value found in an XML resource file. Secrets stored
+    in res/values or AndroidManifest.xml are bundled with the APK and extractable
+    by any user. Remove the value and load it from Android Keystore or a secrets manager
+    (CWE-798, CWE-259, CWE-321).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-798|CWE-259|CWE-321
+    subcategory: Hardcoded Credentials (InsecureShop)
+  pattern-either:
+  - pattern-regex: <string\s+name="[^"]*(?:password|passwd|pwd|secret|api_key|apikey|auth_token|credential)[^"]*">[^<]{4,}</string>
+  - pattern-regex: android:password="[^"]+"
+  - pattern-regex: meta-data\s[^>]*android:name="[^"]*(?:password|secret|api_key|apikey)[^"]*"\s[^>]*android:value="[^"]+"
+  severity: CRITICAL
+- id: custom.gap-aws-cognito-misconfiguration-kotlin
+  languages:
+  - kotlin
+  message: Hardcoded AWS Cognito User Pool ID, Identity Pool ID, or client secret
+    detected. Embedding these values in source code exposes them to reverse engineering.
+    Store them in encrypted configuration, Android Keystore, or server-side and enforce
+    least privilege IAM policies (CWE-287, CWE-285, CWE-306).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-287|CWE-285|CWE-306
+    subcategory: AWS Cognito Misconfiguration
+  pattern-either:
+  - patterns:
+    - pattern: val $X = "..."
+    - metavariable-regex:
+        metavariable: $X
+        regex: (?i).*(pool_id|poolId|identityPool|userPool|cognitoClient|clientSecret|cognito).*
+  - patterns:
+    - pattern: const val $X = "..."
+    - metavariable-regex:
+        metavariable: $X
+        regex: (?i).*(pool_id|poolId|identityPool|userPool|cognitoClient|clientSecret|cognito).*
+  - pattern: CognitoUserPool($CONTEXT, "...", "...", "...")
+  - pattern: AmazonCognitoIdentityClient(BasicAWSCredentials("...", "..."))
+  - pattern: CognitoUserPoolsSignInProvider.init($CONTEXT, "...", "...", "...", ...)
+  severity: HIGH
+- id: custom.gap-aws-cognito-misconfiguration-xml
+  languages:
+  - xml
+  message: AWS Cognito Pool ID or client secret hardcoded in an XML resource or configuration
+    file. These values are extractable from the APK. Move them to a secure backend
+    or encrypted storage (CWE-287, CWE-285, CWE-306).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-287|CWE-285|CWE-306
+    subcategory: AWS Cognito Misconfiguration
+  pattern-either:
+  - pattern-regex: <string\s+name="[^"]*(?:cognito|pool_id|poolId|identity_pool|userPoolId|clientSecret)[^"]*">[^<]{6,}</string>
+  - pattern-regex: CognitoIdentityPoolId\s*=\s*"[^"]+
+  - pattern-regex: aws_user_pools_id\s*=\s*"[^"]+
+  - pattern-regex: aws_cognito_identity_pool_id\s*=\s*"[^"]+
+  severity: HIGH
+- id: custom.gap-ssl-certificate-validation-kotlin
+  languages:
+  - kotlin
+  message: SSL/TLS certificate validation is disabled or bypassed. A no-op TrustManager
+    or a HostnameVerifier that always returns true exposes the app to man-in-the-middle
+    attacks. Use the default system TrustManager and never suppress hostname verification
+    (CWE-295, CWE-297, CWE-296).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-295|CWE-297|CWE-296
+    subcategory: Lack of SSL Certificate Validation
+  pattern-either:
+  - pattern: "object : X509TrustManager {\n    override fun checkServerTrusted(...)\
+      \ {}\n    ...\n}\n"
+  - pattern: "object : X509TrustManager {\n    override fun checkClientTrusted(...)\
+      \ {}\n    override fun checkServerTrusted(...) {}\n    ...\n}\n"
+  - pattern: HostnameVerifier { _, _ -> true }
+  - pattern: $CONN.setHostnameVerifier { _, _ -> true }
+  - pattern: SSLContext.getInstance("SSL")
+  - pattern: SSLContext.getInstance("TLS")
+  - patterns:
+    - pattern: $OBJ.setHostnameVerifier($HV)
+    - metavariable-regex:
+        metavariable: $HV
+        regex: (?i).*(allow|trust|accept|noop|insecure|bypass).*
+  severity: CRITICAL
+- id: custom.gap-ssl-certificate-validation-xml
+  languages:
+  - xml
+  message: Network security configuration permits cleartext traffic or trusts user-added
+    CA certificates. This allows man-in-the-middle interception of all HTTP/HTTPS
+    traffic. Set cleartextTrafficPermitted="false" and restrict trust anchors to system
+    CAs (CWE-295, CWE-297, CWE-296).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-295|CWE-297|CWE-296
+    subcategory: Lack of SSL Certificate Validation
+  pattern-either:
+  - pattern-regex: cleartextTrafficPermitted\s*=\s*"true"
+  - pattern-regex: <certificates\s+src="user"\s*/>
+  - pattern-regex: <certificates\s+src="user">
+  - pattern-regex: android:usesCleartextTraffic\s*=\s*"true"
+  - pattern-regex: <trust-anchors>\s*<certificates\s+src="all"\s*/>
+  severity: CRITICAL
+- id: custom.gap-insecure-data-storage-kotlin
+  languages:
+  - kotlin
+  message: Sensitive credential or token stored in cleartext via SharedPreferences,
+    SQLite, or plain file I/O. Cleartext storage is readable by other apps on rooted
+    devices and extractable from backups. Use Android Keystore-backed EncryptedSharedPreferences
+    or encrypt values before persistence (CWE-312, CWE-313, CWE-522).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-312|CWE-313|CWE-522
+    subcategory: Insecure Data Storage (local creds)
+  pattern-either:
+  - patterns:
+    - pattern: $EDITOR.putString("$KEY", $VAL)
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i).*(password|passwd|pwd|secret|token|credential|pin|auth).*
+  - patterns:
+    - pattern: $PREFS.edit().putString("$KEY", $VAL)
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i).*(password|passwd|pwd|secret|token|credential|pin|auth).*
+  - pattern: getSharedPreferences("...", Context.MODE_WORLD_READABLE)
+  - pattern: getSharedPreferences("...", 1)
+  - patterns:
+    - pattern: $DB.execSQL($QUERY)
+    - metavariable-regex:
+        metavariable: $QUERY
+        regex: (?i).*(?:password|secret|token).*
+  severity: HIGH
+- id: custom.gap-insecure-data-storage-xml
+  languages:
+  - xml
+  message: Android application backup is enabled or external storage is writable,
+    allowing sensitive data to be extracted via adb backup or by other applications.
+    Set android:allowBackup="false" and avoid writing credentials to external storage
+    (CWE-312, CWE-313, CWE-522).
+  metadata:
+    category: Mobile App Security
+    cwe: CWE-312|CWE-313|CWE-522
+    subcategory: Insecure Data Storage (local creds)
+  pattern-either:
+  - pattern-regex: android:allowBackup\s*=\s*"true"
+  - pattern-regex: android:fullBackupContent\s*=\s*"true"
+  - pattern-regex: android:fullBackupOnly\s*=\s*"true"
+  - pattern-regex: <string\s+name="[^"]*(?:password|passwd|pwd|secret|token|credential)[^"]*">[^<]{4,}</string>
+  - pattern-regex: android:name="[^"]*(?:password|secret|token)[^"]*"\s+android:value="[^"]+"
+  severity: HIGH
+
+- id: custom.gap-login-weak-auth-js
+  languages:
+  - javascript
+  - typescript
+  message: Weak or hardcoded admin authentication detected. Comparing credentials
+    against literal strings such as "admin"/"password" or granting admin roles based
+    on user-supplied input enables trivial account takeover. Use a proper identity
+    provider, bcrypt for password comparison, and enforce RBAC server-side (CWE-287,
+    CWE-307, CWE-521, CWE-798).
+  metadata:
+    category: Broken Authentication
+    cwe: CWE-287|CWE-307|CWE-521|CWE-798
+    subcategory: Login as admin (weak auth)
+  pattern-either:
+  - pattern: '$USER === "admin" && $PASS === "admin"
+
+      '
+  - pattern: '$USER == "admin" && $PASS == "admin"
+
+      '
+  - pattern: '$PASS === "admin"
+
+      '
+  - pattern: '$PASS === "password"
+
+      '
+  - pattern: '$PASS === "123456"
+
+      '
+  - pattern: 'if ($U === "admin") { ... }
+
+      '
+  - pattern: req.body.isAdmin
+  - pattern: req.query.isAdmin
+  - pattern: '$USER.role = req.body.role;
+
+      '
+  - pattern: '$USER.isAdmin = req.body.isAdmin;
+
+      '
+  severity: CRITICAL
+- id: custom.gap-login-weak-auth-python
+  languages:
+  - python
+  message: Weak or hardcoded admin authentication detected in Python. Hardcoded credential
+    comparisons or assigning admin privileges based on user input bypass proper authentication.
+    Use a secure password hashing library (bcrypt, argon2) and enforce role checks
+    server-side (CWE-287, CWE-307, CWE-521, CWE-798).
+  metadata:
+    category: Broken Authentication
+    cwe: CWE-287|CWE-307|CWE-521|CWE-798
+    subcategory: Login as admin (weak auth)
+  pattern-either:
+  - pattern: "if $U == \"admin\" and $P == \"admin\":\n    ...\n"
+  - pattern: "if $U == \"admin\" and $P == \"password\":\n    ...\n"
+  - pattern: "if $P == \"admin\":\n    ...\n"
+  - pattern: "if $P == \"password\":\n    ...\n"
+  - pattern: "if $P == \"123456\":\n    ...\n"
+  - pattern: '$USER.is_admin = request.json.get(...)
+
+      '
+  - pattern: '$USER.role = request.json.get(...)
+
+      '
+  severity: CRITICAL
+- id: custom.gap-login-weak-auth-yaml
+  languages:
+  - yaml
+  message: Default or hardcoded admin credentials found in YAML configuration. Shipping
+    default admin/admin or admin/password credentials allows any attacker with access
+    to the config file to authenticate. Replace with environment variable references
+    and enforce credential rotation (CWE-287, CWE-521, CWE-798).
+  metadata:
+    category: Broken Authentication
+    cwe: CWE-287|CWE-307|CWE-521|CWE-798
+    subcategory: Login as admin (weak auth)
+  pattern-either:
+  - pattern: 'username: admin
+
+      password: admin
+
+      '
+  - pattern: 'username: admin
+
+      password: password
+
+      '
+  - pattern: 'username: admin
+
+      password: "123456"
+
+      '
+  - pattern: "admin:\n  password: admin\n"
+  - pattern: "admin:\n  password: password\n"
+  severity: HIGH
+- id: custom.gap-login-weak-auth-xml
+  languages:
+  - xml
+  message: Default or hardcoded admin credentials found in XML configuration. Any
+    attacker with access to this file can authenticate as a privileged user. Reference
+    credentials from a secrets manager or environment variables and never commit plaintext
+    passwords (CWE-287, CWE-521, CWE-798).
+  metadata:
+    category: Broken Authentication
+    cwe: CWE-287|CWE-307|CWE-521|CWE-798
+    subcategory: Login as admin (weak auth)
+  pattern-either:
+  - pattern: '<user name="admin" password="admin" roles="..."/>
+
+      '
+  - pattern: '<user name="admin" password="password" roles="..."/>
+
+      '
+  - pattern: '<property name="username" value="admin"/>
+
+      '
+  - pattern: '<property name="password" value="admin"/>
+
+      '
+  - pattern: '<property name="password" value="password"/>
+
+      '
+  - pattern: '<credential username="admin" password="admin"/>
+
+      '
+  severity: HIGH
+- id: custom.gap-wallet-scoreboard-logic-js
+  languages:
+  - javascript
+  - typescript
+  message: Potential wallet depletion or scoreboard logic flaw detected. Directly
+    assigning balance, score, or amount values from user-supplied request data without
+    server-side validation enables attackers to manipulate financial state or game
+    scores arbitrarily. Always recompute authoritative values server-side and validate
+    that numeric inputs are within expected positive ranges.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: '$USER.balance = req.body.$FIELD;
+
+      '
+  - pattern: '$USER.wallet = req.body.$FIELD;
+
+      '
+  - pattern: '$USER.score = req.body.$FIELD;
+
+      '
+  - pattern: '$USER.credits = req.body.$FIELD;
+
+      '
+  - pattern: '$USER.points = req.body.$FIELD;
+
+      '
+  - pattern: '$OBJ.balance += req.body.$FIELD;
+
+      '
+  - pattern: '$OBJ.score += req.body.$FIELD;
+
+      '
+  - pattern: '$OBJ.credits += req.body.$FIELD;
+
+      '
+  - pattern: '$AMOUNT = req.body.amount;
+
+      ...
+
+      $OBJ.balance -= $AMOUNT;
+
+      '
+  - pattern: '$AMOUNT = req.body.price;
+
+      ...
+
+      $OBJ.balance -= $AMOUNT;
+
+      '
+  severity: HIGH
+- id: custom.gap-wallet-scoreboard-logic-python
+  languages:
+  - python
+  message: Potential wallet depletion or scoreboard logic flaw detected in Python.
+    Assigning or incrementing balance, score, or credit values directly from request
+    data without server-side bounds checking allows attackers to craft negative amounts,
+    overflow values, or replay transactions. Validate ranges and recompute values
+    server-side.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: '$USER.balance = request.json.get(...)
+
+      '
+  - pattern: '$USER.score = request.json.get(...)
+
+      '
+  - pattern: '$USER.credits = request.json.get(...)
+
+      '
+  - pattern: '$USER.points = request.json.get(...)
+
+      '
+  - pattern: '$AMOUNT = request.json.get("amount", ...)
+
+      ...
+
+      $USER.balance -= $AMOUNT
+
+      '
+  - pattern: '$AMOUNT = request.form.get("amount", ...)
+
+      ...
+
+      $USER.balance -= $AMOUNT
+
+      '
+  - pattern: '$AMOUNT = request.args.get("amount", ...)
+
+      ...
+
+      $USER.balance -= $AMOUNT
+
+      '
+  - pattern: '$USER.balance = request.form.get(...)
+
+      '
+  - pattern: '$USER.score = request.form.get(...)
+
+      '
+  severity: HIGH
+- id: custom.gap-wallet-scoreboard-logic-yaml
+  languages:
+  - yaml
+  message: Potentially dangerous wallet or scoring configuration detected in YAML.
+    Disabling balance validation, enabling debug/cheat modes, or exposing admin scoring
+    endpoints without access controls can allow wallet depletion or score manipulation.
+    Remove debug flags and restrict privileged configuration paths in production.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: 'validate_balance: false
+
+      '
+  - pattern: 'skip_payment_validation: true
+
+      '
+  - pattern: 'cheat_mode: true
+
+      '
+  - pattern: 'debug_scoring: true
+
+      '
+  - pattern: 'allow_negative_balance: true
+
+      '
+  - pattern: 'bypass_wallet_check: true
+
+      '
+  severity: MEDIUM
+- id: custom.gap-wallet-scoreboard-logic-xml
+  languages:
+  - xml
+  message: Potentially dangerous wallet or scoring configuration detected in XML.
+    Disabled balance validation, cheat/debug modes, or unrestricted scoring endpoints
+    can be abused to deplete wallets or manipulate scoreboards. Ensure all financial
+    and scoring operations enforce server-side authorization and validation in production.
+  metadata:
+    category: Miscellaneous
+    cwe: unknown
+    subcategory: Wallet depletion or score board logic flaws
+  pattern-either:
+  - pattern: '<property name="validateBalance" value="false"/>
+
+      '
+  - pattern: '<property name="cheatMode" value="true"/>
+
+      '
+  - pattern: '<property name="debugScoring" value="true"/>
+
+      '
+  - pattern: '<property name="allowNegativeBalance" value="true"/>
+
+      '
+  - pattern: '<property name="skipPaymentValidation" value="true"/>
+
+      '
+  - pattern: '<param-name>bypass_wallet_check</param-name>
+
+      <param-value>true</param-value>
+
+      '
+  severity: MEDIUM

@@ -1,0 +1,91 @@
+# gitleaks.toml — Security Research Config
+# Used by run_all_layers.py to bypass repo-embedded allowlists in demo apps.
+# Purpose: fair detection comparison — scan for ALL secrets regardless of
+# intentionality markers placed in the target repos.
+
+title = "security-research-gitleaks"
+
+# ─── Extend built-in rules ───────────────────────────────────────────────────
+# (gitleaks merges these with the default ruleset when --config is passed)
+
+[[rules]]
+id          = "hardcoded-password-assignment"
+description = "Hardcoded password assigned to a variable or map"
+# Matches:  variable["user"] = "pass"   or   password = "value"   or   passwd: "value"
+regex       = '''(?i)(?:password|passwd|pwd|secret|credentials?)\s*(?:\[["'][^"']+["']\])?\s*(?:=|:)\s*["']([^"'\s]{4,})["']'''
+entropy     = 0
+severity    = "CRITICAL"
+keywords    = ["password", "passwd", "pwd", "secret", "credentials"]
+[rules.allowlist]
+  regexes = [
+    # Skip obvious placeholders
+    '''(?i)(placeholder|your_|<.*>|\$\{|%s|__PASSWORD__)''',
+    # Skip bcrypt/hash function calls (not actual values)
+    '''(?i)bcrypt|hashSync|createHash''',
+  ]
+
+[[rules]]
+id          = "hardcoded-hmac-secret"
+description = "HMAC secret hardcoded as string literal"
+regex       = '''(?i)createHmac\s*\(\s*["'][^"']+["']\s*,\s*["']([A-Za-z0-9+/=_\-]{8,})["']'''
+entropy     = 0
+severity    = "HIGH"
+keywords    = ["createHmac", "hmac"]
+
+[[rules]]
+id          = "hardcoded-cookie-secret"
+description = "Hardcoded session or cookie secret"
+regex       = '''(?i)(?:cookie|session|csrf)(?:Secret|Key|_secret|_key)\s*(?:=|:)\s*["']([^"'\s]{6,})["']'''
+entropy     = 0
+severity    = "HIGH"
+keywords    = ["cookieSecret", "sessionSecret", "csrfSecret"]
+[rules.allowlist]
+  regexes = ['''(?i)(placeholder|your_|<.*>|\$\{)''']
+
+[[rules]]
+id          = "hardcoded-crypto-key"
+description = "Hardcoded cryptography key variable"
+regex       = '''(?i)(?:crypto|cipher|encrypt)(?:Key|Secret|_key|_secret)\s*(?:=|:)\s*["']([^"'\s]{8,})["']'''
+entropy     = 0
+severity    = "HIGH"
+keywords    = ["cryptoKey", "cipherKey", "encryptKey"]
+[rules.allowlist]
+  regexes = ['''(?i)(placeholder|your_|<.*>|\$\{|_here)''']
+
+[[rules]]
+id          = "hardcoded-credential-map"
+description = "Hardcoded credential stored in a map/dict by username key"
+# Matches:  credMap["username"] = "password_value"
+# Catches:  userCreds["shopuser"] = "!ns3csh0p"  (InsecureShop Kotlin pattern)
+regex       = '''(?i)(?:cred|auth|user|login|account)\w*\s*\[["'][^"']+["']\]\s*=\s*["']([^"'\s]{4,})["']'''
+entropy     = 0
+severity    = "CRITICAL"
+keywords    = ["cred", "auth", "login", "account"]
+[rules.allowlist]
+  regexes = ['''(?i)(placeholder|your_|<.*>|\$\{|test|mock|dummy)''']
+
+[[rules]]
+id          = "jwt-secret-inline"
+description = "JWT signed with a hardcoded secret"
+# jwt.sign(payload, "hardcoded_secret") or similar
+regex       = '''(?i)(?:jwt\.sign|jsonwebtoken\.sign)\s*\([^,]+,\s*["']([^"']{8,})["']'''
+entropy     = 0
+severity    = "CRITICAL"
+keywords    = ["jwt.sign", "jsonwebtoken"]
+
+# ─── Path exclusions (scan everything in demo apps) ──────────────────────────
+# NOTE: We intentionally do NOT include the target repos' own allowlists.
+# We only exclude binary/generated files that cannot contain credentials.
+[allowlist]
+  description = "Binary and generated files only"
+  paths = [
+    '''\.git/objects/''',
+    '''node_modules/''',
+    '''package-lock\.json''',
+    '''yarn\.lock''',
+    '''\.min\.js$''',
+    '''\.map$''',
+    '''\.png$''', '''\.jpg$''', '''\.gif$''', '''\.ico$''',
+    '''\.mp4$''', '''\.webm$''', '''\.woff''', '''\.ttf''',
+    '''\.jar$''', '''\.class$''', '''\.apk$''', '''\.aar$''',
+  ]
