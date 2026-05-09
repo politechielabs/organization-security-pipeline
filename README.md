@@ -11,7 +11,7 @@ Reusable GitHub Actions security pipeline. Call it from any repo's workflow — 
 | L1 | Gitleaks | Hardcoded secrets, credentials, tokens | Yes — any finding |
 | L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL/HIGH |
 | L3 | Semgrep | SAST patterns (custom rules + optional external pack) | Yes — ERROR severity |
-| L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | Yes — CRITICAL/HIGH |
+| L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | No — posts inline review comments only |
 
 Each layer must pass before the next runs. If L1 finds a secret, L2–L4 never execute.
 
@@ -70,13 +70,13 @@ L2 · Trivy ──────── fail → PR blocked (CVE/misconfig)
 L3 · Semgrep ────── fail → PR blocked (SAST finding)
       │ pass
       ▼
-L4 · Claude ──────── always runs; fail → PR blocked (CRITICAL/HIGH finding)
-      │                              + posts PR comment with all findings
+L4 · Claude ──────── always runs; posts inline review comments per finding
+      │               never blocks the PR
       ▼
 Generate rules ──── CRITICAL/HIGH gaps → raises a PR with new Semgrep rules
 ```
 
-L4 posts a summary comment on the PR listing every finding with severity, CWE, OWASP category, file, and line. Rule generation runs inside the same job immediately after Claude analysis.
+L4 uses the GitHub Pull Request Reviews API to post an **inline comment on the exact file and line** for each finding. The review is submitted as `COMMENT` (never `REQUEST_CHANGES`), so the PR is never blocked by L4. CRITICAL/HIGH findings also trigger rule generation in the same job.
 
 ---
 
@@ -142,9 +142,9 @@ Six custom rules on top of the Gitleaks default set:
 - `hardcoded-credential-map` — `credMap["user"] = "pass"`
 - `jwt-secret-inline` — `jwt.sign(payload, "literal")`
 
-### Semgrep (`config/semgrep-custom-rules.yml`)
+### Semgrep (`config/semgrep-custom-rules/`)
 
-Custom SAST rules tuned for injection, auth bypasses, secrets exposure, and insecure crypto. Also includes the full `config/community/` and `config/gitlab/` rule packs. Claude-generated gap-fill rules are appended here (or to your external rules repo) over time.
+Custom SAST rules live in `config/semgrep-custom-rules/` as individual numbered YAML files (`custom_rules_1.yml`, `custom_rules_2.yml`, …). Each auto-generated run writes a new file so rule IDs never collide and Semgrep never silently skips duplicates. Also includes the full `config/community/` and `config/gitlab/` rule packs.
 
 ---
 
@@ -166,7 +166,10 @@ Every run uploads an artifact (retained 14 days):
 
 config/
   gitleaks.toml               # Custom Gitleaks rules (extends default set)
-  semgrep-custom-rules.yml    # Active custom Semgrep rule set
+  semgrep-custom-rules/
+    custom_rules_1.yml        # Initial custom Semgrep rule set
+    custom_rules_2.yml        # Auto-generated gap-fill rules (run N)
+    …                         # One new file per generation run
   community/                  # Semgrep community rule packs
   gitlab/                     # Semgrep GitLab rule packs
 

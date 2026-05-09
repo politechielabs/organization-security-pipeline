@@ -1,0 +1,49 @@
+# Trivy configuration — used by L2 of the security pipeline.
+# Reference: https://aquasecurity.github.io/trivy/latest/docs/references/configuration/config-file/
+
+# ── What to scan ─────────────────────────────────────────────────────────────
+scan:
+  scanners:
+    - vuln       # known CVEs in dependency manifests / lock files
+    - misconfig  # IaC misconfigurations (Dockerfile, Terraform, k8s YAML)
+    - secret     # hardcoded credentials (backup to L1 Gitleaks)
+
+# ── Severity filter ───────────────────────────────────────────────────────────
+severity:
+  - CRITICAL
+  - HIGH
+
+# ── Vulnerability options ─────────────────────────────────────────────────────
+vulnerability:
+  ignore-unfixed: true   # skip CVEs with no upstream fix — reduces noise
+  type:
+    - os         # OS packages (apt, apk, yum)
+    - library    # language-level packages (pip, npm, go modules, maven, etc.)
+
+# ── Misconfig options ─────────────────────────────────────────────────────────
+misconfig:
+  # include these IaC targets when present in the scanned repo
+  include-non-failures: false   # only report failures, not warnings/passes
+
+# ── Secret scanning options ───────────────────────────────────────────────────
+secret:
+  config: ""   # use built-in ruleset; override with a path to custom rules
+
+# ── Output ────────────────────────────────────────────────────────────────────
+format: sarif   # consumed by GitHub Security tab
+
+# ── Paths to skip ─────────────────────────────────────────────────────────────
+skip-dirs:
+  - .git
+  - .security-tools   # don't scan the security tooling itself
+  - node_modules
+  - vendor
+  - .venv
+  - __pycache__
+  - dist
+  - build
+
+skip-files:
+  - "**/*.test.*"
+  - "**/*_test.go"
+  - "**/*.spec.*"
