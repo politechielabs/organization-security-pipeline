@@ -44,10 +44,10 @@ from dotenv import load_dotenv
 ROOT        = Path(__file__).resolve().parent.parent   # security_rep/
 SCRIPTS_DIR = Path(__file__).resolve().parent          # security_rep/scripts/
 
-CUSTOM_RULES_PATH  = SCRIPTS_DIR / "config" / "semgrep-custom-rules.yml"
-GITLEAKS_CONFIG    = SCRIPTS_DIR / "gitleaks.toml"
-TRIVY_CONFIG       = SCRIPTS_DIR / "config" / "trivy-comprehensive.yaml"
-SEMGREP_CONFIG_DIR = SCRIPTS_DIR / "config"
+CUSTOM_RULES_PATH  = ROOT / "config" / "semgrep-custom-rules.yml"
+GITLEAKS_CONFIG    = ROOT / "config" / "gitleaks.toml"
+TRIVY_CONFIG       = ROOT / "config" / "trivy-comprehensive.yaml"
+SEMGREP_CONFIG_DIR = ROOT / "config"
 SKILL_DIR          = Path.home() / ".claude" / "skills" / "security-review"
 GENERATED_RULES_OUTPUT = Path("/tmp/generated_rules.yml")
 
@@ -361,7 +361,7 @@ def _gather_files(target_path: Path) -> str:
             fpath = Path(dirpath) / fname
             if fpath.suffix.lower() not in SCAN_EXTENSIONS:
                 continue
-            if "scripts/config" in str(fpath.relative_to(target_path)):
+            if str(fpath.relative_to(target_path)).startswith("config"):
                 continue
             try:
                 text  = fpath.read_text(errors="ignore")
