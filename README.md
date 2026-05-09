@@ -70,13 +70,13 @@ L2 · Trivy ──────── fail → PR blocked (CVE/misconfig)
 L3 · Semgrep ────── fail → PR blocked (SAST finding)
       │ pass
       ▼
-L4 · Claude ──────── fail → PR blocked (semantic finding)
-      │ always runs regardless of L4 result
+L4 · Claude ──────── always runs; fail → PR blocked (CRITICAL/HIGH finding)
+      │                              + posts PR comment with all findings
       ▼
-Generate rules ──── finds gaps → raises a PR with new Semgrep rules
+Generate rules ──── CRITICAL/HIGH gaps → raises a PR with new Semgrep rules
 ```
 
-L4 also posts a summary comment on the PR listing every finding with severity, CWE, OWASP category, file, and line.
+L4 posts a summary comment on the PR listing every finding with severity, CWE, OWASP category, file, and line. Rule generation runs inside the same job immediately after Claude analysis.
 
 ---
 
@@ -95,7 +95,7 @@ Branch name: `security/gap-rules-YYYYMMDD-HHMMSS`
 
 The next time L3 runs, it picks up any merged rules from the rules repo automatically.
 
-> **Loop prevention**: PRs from branches starting with `security/` never trigger rule generation, so there is no infinite feedback loop.
+> **Loop prevention**: PRs from branches starting with `security/` skip L4 entirely, so there is no infinite feedback loop.
 
 ---
 
@@ -113,9 +113,25 @@ The pipeline clones that repo on every L3 run and appends new rules to `custom-r
 
 ---
 
+## Local usage
+
+Run the full pipeline locally against any directory:
+
+```bash
+# Copy .env.example → .env and fill in CLAUDE_API_KEY
+python3 scripts/run_reviewer.py <target_path>
+
+# Skip L1–L3 hard gates (useful for testing L4 + rule generation)
+python3 scripts/run_reviewer.py <target_path> --force
+```
+
+Results are written to `results/raw/claude_code/<target_name>.json`.
+
+---
+
 ## Custom detection rules
 
-### Gitleaks (`scripts/gitleaks.toml`)
+### Gitleaks (`config/gitleaks.toml`)
 
 Six custom rules on top of the Gitleaks default set:
 
@@ -126,22 +142,19 @@ Six custom rules on top of the Gitleaks default set:
 - `hardcoded-credential-map` — `credMap["user"] = "pass"`
 - `jwt-secret-inline` — `jwt.sign(payload, "literal")`
 
-The config intentionally skips binary files and generated assets but does **not** honour allowlists embedded in target repos — those are typically demo-app noise suppressors.
+### Semgrep (`config/semgrep-custom-rules.yml`)
 
-### Semgrep (`scripts/config/semgrep-custom-rules.yml`)
-
-Custom SAST rules tuned for injection, auth bypasses, secrets exposure, and insecure crypto. Claude-generated gap-fill rules are appended here (or to your external rules repo) over time.
+Custom SAST rules tuned for injection, auth bypasses, secrets exposure, and insecure crypto. Also includes the full `config/community/` and `config/gitlab/` rule packs. Claude-generated gap-fill rules are appended here (or to your external rules repo) over time.
 
 ---
 
 ## Artifacts
 
-Every run uploads two artifacts (retained 7–14 days):
+Every run uploads an artifact (retained 14 days):
 
 | Artifact | Contents |
 |----------|----------|
-| `l4-findings-<run_id>` | `/tmp/ci_findings.json` — all L4 findings with severity, CWE, file, line |
-| `generated-semgrep-rules-<run_id>` | `/tmp/generated_rules.yml` — rules generated this run (also in the PR) |
+| `generated-semgrep-rules-<run_id>` | `/tmp/generated_rules.yml` — rules generated this run (also raised as a PR) |
 
 ---
 
@@ -149,30 +162,32 @@ Every run uploads two artifacts (retained 7–14 days):
 
 ```
 .github/workflows/
-  security-pipeline.yml     # Reusable workflow — call this from other repos
+  security-pipeline.yml       # Reusable workflow — call this from other repos
+
+config/
+  gitleaks.toml               # Custom Gitleaks rules (extends default set)
+  semgrep-custom-rules.yml    # Active custom Semgrep rule set
+  community/                  # Semgrep community rule packs
+  gitlab/                     # Semgrep GitLab rule packs
 
 scripts/
-  ci/
-    l4_claude_ci.py          # L4: diff-aware Claude analysis, PR comment, exit 1 on CRITICAL/HIGH
-    generate_rules_ci.py     # Post-L4: generate Semgrep rules for gaps, raise PR
-  config/
-    semgrep-custom-rules.yml # Active Semgrep rule set
+  run_reviewer.py             # 4-layer pipeline runner (local + CI entrypoint)
+  analyze_with_agent.py       # Standalone Claude-only analysis script
   prompts/
-    constants.py             # SEMGREP_RULE_SYSTEM prompt used by rule generation
-  gitleaks.toml              # Custom Gitleaks rules (extends default set)
+    constants.py              # SEMGREP_RULE_SYSTEM prompt for rule generation
 ```
 
 ---
 
 ## L4 analysis scope
 
-The Claude analysis is diff-aware and scans only changed files. Limits per run:
+Claude scans all files in the target directory (CI: full workspace; local: specified path). Limits per run:
 
-- Max 40 files
-- Max 3 000 chars per file
-- Max 150 000 prompt chars total
-- Skips: `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `.next`, `vendor`, `target`, `bin`, `obj`, `.security-tools`
+- Max 60 files
+- Max 4 000 chars per file
+- Max 180 000 prompt chars total
+- Skips: `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `.next`, `vendor`, `target`, `bin`, `obj`, `config/`
 
 Supported extensions: `.py .js .ts .jsx .tsx .java .kt .kts .go .rb .php .cs .swift .env .yaml .yml .toml .xml .config .cfg .ini .sh .bash .sql`
 
-Claude reports only findings with confidence ≥ 8/10. MEDIUM/LOW findings appear as advisory comments on the PR but do not block it.
+Claude reports only findings with confidence ≥ 8/10. MEDIUM/LOW findings appear as advisory in the PR comment but do not block the PR.

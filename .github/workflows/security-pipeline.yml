@@ -24,9 +24,8 @@ permissions:
 # Step 1: Checkout CALLER's code → default workspace (GITHUB_WORKSPACE)
 # Step 2: Checkout security_rep  → .security-tools/
 #
-# Scripts:  python .security-tools/scripts/ci/<script>.py
-# Configs:  .security-tools/scripts/config/
-#           .security-tools/scripts/gitleaks.toml
+# Scripts:  python .security-tools/scripts/run_reviewer.py
+# Configs:  .security-tools/config/
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -54,7 +53,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .security-tools/scripts/gitleaks.toml
+          GITLEAKS_CONFIG: .security-tools/config/gitleaks.toml
 
   # ────────────────────────────────────────────────────────────────────────────
   # L2 · Trivy — SCA / CVE / Misconfigs
@@ -143,7 +142,7 @@ jobs:
             exit 0
           fi
 
-          CONFIG_FLAGS="--config .security-tools/scripts/config/semgrep-custom-rules.yml"
+          CONFIG_FLAGS="--config .security-tools/config/semgrep-custom-rules.yml"
           [ -d /tmp/semgrep-rules-external ] && \
             CONFIG_FLAGS="$CONFIG_FLAGS --config /tmp/semgrep-rules-external"
 
@@ -163,14 +162,21 @@ jobs:
           category: semgrep
 
   # ────────────────────────────────────────────────────────────────────────────
-  # L4 · Claude — Semantic Triage
-  # Analyzes changed files for vulnerabilities that rule-based tools miss.
-  # Blocks on CRITICAL or HIGH findings. Posts a summary comment on the PR.
+  # L4 · Claude — Semantic Triage + Semgrep Rule Generation
+  # Runs run_reviewer.py --force against the caller's workspace.
+  # --force bypasses L1-L3 gates (already enforced by the jobs above).
+  # Claude posts a PR comment with all findings.
+  # CRITICAL/HIGH findings trigger automatic Semgrep rule generation + PR.
+  # Skipped for security/ branches to prevent infinite rule-gen loops.
   # ────────────────────────────────────────────────────────────────────────────
   l4-claude:
-    name: "L4 · Claude — Semantic Review"
+    name: "L4 · Claude — Semantic Review + Rule Generation"
     runs-on: ubuntu-latest
     needs: l3-semgrep
+    if: "!startsWith(github.head_ref, 'security/')"
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout target code
@@ -186,87 +192,22 @@ jobs:
           path: .security-tools
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get changed files
-        run: |
-          git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            > /tmp/all_changed.txt
-          echo "Changed files ($(wc -l < /tmp/all_changed.txt)):"
-          cat /tmp/all_changed.txt
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install anthropic
+      - name: Install dependencies
+        run: pip install anthropic pyyaml python-dotenv
 
-      - name: Claude semantic analysis
+      - name: Claude semantic analysis + rule generation
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: python .security-tools/scripts/ci/l4_claude_ci.py
-
-      - name: Upload findings artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: l4-findings-${{ github.run_id }}
-          path: /tmp/ci_findings.json
-          retention-days: 7
-
-  # ────────────────────────────────────────────────────────────────────────────
-  # Generate Semgrep Rules for Gaps
-  # Runs after L3+L4 (regardless of L4 outcome) to generate new Semgrep rules
-  # for CRITICAL/HIGH findings not covered by existing rules.
-  # If SEMGREP_RULES_REPO + RULES_REPO_TOKEN set → creates PR in that repo.
-  # Otherwise → uploads generated rules as artifact for manual review.
-  # Skipped for security/ branches to prevent rule-generation loops.
-  # ────────────────────────────────────────────────────────────────────────────
-  generate-rules:
-    name: "Generate Semgrep Rules for Gaps"
-    runs-on: ubuntu-latest
-    needs: [l3-semgrep, l4-claude]
-    if: |
-      always() &&
-      !startsWith(github.head_ref, 'security/') &&
-      needs.l3-semgrep.result == 'success' &&
-      (needs.l4-claude.result == 'success' || needs.l4-claude.result == 'failure')
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout security tools
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.workflow_repository }}
-          ref: ${{ github.workflow_sha }}
-          path: .security-tools
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download L4 findings
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: l4-findings-${{ github.run_id }}
-          path: /tmp/
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - run: pip install anthropic pyyaml
-
-      - name: Generate Semgrep rules
-        env:
-          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-          SEMGREP_RULES_REPO: ${{ secrets.SEMGREP_RULES_REPO }}
-          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python .security-tools/scripts/ci/generate_rules_ci.py
+          SEMGREP_RULES_REPO: ${{ secrets.SEMGREP_RULES_REPO }}
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+        run: python .security-tools/scripts/run_reviewer.py "$GITHUB_WORKSPACE" --force
 
       - name: Upload generated rules artifact
         if: always()
