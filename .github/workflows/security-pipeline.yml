@@ -96,7 +96,7 @@ jobs:
           severity: "CRITICAL,HIGH"
           exit-code: "1"          # blocks PR on CRITICAL/HIGH
           ignore-unfixed: true    # skip CVEs with no upstream fix (reduces noise)
-          trivyignores: .trivyignore  # optional per-repo ignore list
+          skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
 
       - name: Upload Trivy SARIF to GitHub Security

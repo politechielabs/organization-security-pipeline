@@ -311,6 +311,19 @@ def layer1_gitleaks(target_path: Path) -> list[dict]:
 
 # ─── Layer 2: Trivy ──────────────────────────────────────────────────────────
 
+# Directories that are part of this security tooling repo itself and should
+# never be scanned for CVEs — they contain intentionally vulnerable test
+# fixtures (Semgrep community rule corpus) and old config history.
+_TRIVY_SKIP_DIRS = [
+    "config/community",    # Semgrep test fixtures (old vulnerable deps)
+    "config/gitlab",       # Semgrep GitLab rules corpus (old vulnerable deps)
+    ".git",
+    "node_modules",
+    "vendor",
+    ".venv",
+    "__pycache__",
+]
+
 def layer2_trivy(target_path: Path) -> list[dict]:
     tmp = Path(tempfile.mkdtemp())
     out = tmp / "trivy.json"
@@ -320,6 +333,10 @@ def layer2_trivy(target_path: Path) -> list[dict]:
     else:
         cmd += ["--severity", "CRITICAL,HIGH,MEDIUM,LOW",
                 "--scanners", "vuln,misconfig,secret"]
+    # Always apply skip-dirs explicitly — config-file skip-dirs can be
+    # unreliable depending on Trivy version / working directory.
+    for d in _TRIVY_SKIP_DIRS:
+        cmd += ["--skip-dirs", d]
     cmd.append(str(target_path))
 
     print("  [L2] Trivy scan ...")

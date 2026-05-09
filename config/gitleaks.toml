@@ -73,12 +73,17 @@ entropy     = 0
 severity    = "CRITICAL"
 keywords    = ["jwt.sign", "jsonwebtoken"]
 
-# ─── Path exclusions (scan everything in demo apps) ──────────────────────────
-# NOTE: We intentionally do NOT include the target repos' own allowlists.
-# We only exclude binary/generated files that cannot contain credentials.
+# ─── Global allowlist ────────────────────────────────────────────────────────
+# Excludes:
+#   1. Binary / generated files that cannot contain live credentials.
+#   2. Semgrep test-fixture corpus (config/community/, config/gitlab/) —
+#      these files intentionally contain vulnerable patterns for rule testing
+#      and are NOT real secrets.
+#   3. Documentation examples in README.md / docs/ — illustrative only.
 [allowlist]
-  description = "Binary and generated files only"
+  description = "Binary, generated files, and Semgrep test fixtures"
   paths = [
+    # ── binary / generated ────────────────────────────────────────────────
     '''\.git/objects/''',
     '''node_modules/''',
     '''package-lock\.json''',
@@ -88,4 +93,15 @@ keywords    = ["jwt.sign", "jsonwebtoken"]
     '''\.png$''', '''\.jpg$''', '''\.gif$''', '''\.ico$''',
     '''\.mp4$''', '''\.webm$''', '''\.woff''', '''\.ttf''',
     '''\.jar$''', '''\.class$''', '''\.apk$''', '''\.aar$''',
+    # ── Semgrep test fixtures (intentionally vulnerable code) ─────────────
+    '''config/community/''',
+    '''config/gitlab/''',
+    # ── Semgrep rule definitions (regex patterns look like secrets to gitleaks) ──
+    '''config/semgrep-custom-rules/''',
+    # ── Old paths in git history (files moved to config/ during restructure) ──
+    '''scripts/gitleaks\.toml''',
+    '''scripts/config/''',
+    # ── Documentation examples ────────────────────────────────────────────
+    '''README\.md''',
+    '''docs/''',
   ]

@@ -42,6 +42,10 @@ skip-dirs:
   - __pycache__
   - dist
   - build
+  # Semgrep test fixtures — intentionally contain vulnerable dependency files
+  # (old Struts, Commons Collections, etc.) for rule testing purposes.
+  - config/community
+  - config/gitlab
 
 skip-files:
   - "**/*.test.*"
