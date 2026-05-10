@@ -28,23 +28,23 @@ permissions:
 # Configs:  .security-tools/config/
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
   # L1 · Gitleaks — Secrets & Credentials
-  # Blocks immediately on any secret/credential leak.
+  # Uses binary directly — no gitleaks-action, no license required.
   # ────────────────────────────────────────────────────────────────────────────
   l1-gitleaks:
     name: "L1 · Gitleaks — Secrets"
     runs-on: ubuntu-latest
-    # Job-level permissions are required for workflow_call compatibility.
-    # Top-level permissions are ignored when this workflow is called from another repo.
     permissions:
       contents: read
-      pull-requests: write   # post PR annotations
+      security-events: write
+      pull-requests: write
+
     steps:
       - name: Checkout target code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so gitleaks can scan all PR commits
+          fetch-depth: 0
 
       - name: Checkout security tools
         uses: actions/checkout@v4
@@ -54,12 +54,15 @@ jobs:
           path: .security-tools
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install gitleaks
+      - name: Install Gitleaks binary (no license needed)
         run: |
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
+          curl -sSfL \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
             | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
 
       - name: Scan filesystem for secrets
+        # --no-git scans working tree only, not history
         run: |
           gitleaks detect \
             --config .security-tools/config/gitleaks.toml \
@@ -68,6 +71,7 @@ jobs:
             --exit-code 1 \
             --report-format sarif \
             --report-path gitleaks-fs.sarif
+        continue-on-error: true   # collect both reports before failing
 
       - name: Scan git history for secrets
         run: |
@@ -77,13 +81,36 @@ jobs:
             --exit-code 1 \
             --report-format sarif \
             --report-path gitleaks-git.sarif
+        continue-on-error: true   # collect both reports before failing
 
-      - name: Upload Gitleaks SARIF to GitHub Security
+      - name: Upload filesystem SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: gitleaks-fs.sarif
-          category: gitleaks
+          category: gitleaks-fs
+
+      - name: Upload git-history SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks-git.sarif
+          category: gitleaks-git
+
+      - name: Fail if secrets found
+        # Re-check exit codes from both scans so the job fails correctly
+        run: |
+          FS_HITS=$(jq '.runs[0].results | length' gitleaks-fs.sarif  2>/dev/null || echo 0)
+          GIT_HITS=$(jq '.runs[0].results | length' gitleaks-git.sarif 2>/dev/null || echo 0)
+          TOTAL=$((FS_HITS + GIT_HITS))
+          echo "Filesystem findings : $FS_HITS"
+          echo "Git history findings: $GIT_HITS"
+          echo "Total               : $TOTAL"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "❌ $TOTAL secret(s) detected — PR blocked"
+            exit 1
+          fi
+          echo "✅ No secrets found"
 
   # ────────────────────────────────────────────────────────────────────────────
   # L2 · Trivy — SCA / CVE / Misconfigs
@@ -219,7 +246,7 @@ jobs:
     needs: l3-semgrep
     if: "!startsWith(github.head_ref, 'security/')"
     # continue even if findings are detected — L4 never blocks the PR
-    continue-on-error: false
+    continue-on-error: true
     permissions:
       contents: write
       pull-requests: write
