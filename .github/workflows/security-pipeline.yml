@@ -6,10 +6,8 @@ on:
     secrets:
       CLAUDE_API_KEY:
         required: true
-      SEMGREP_RULES_REPO:
-        required: false   # org/repo of shared Semgrep rules repo
       RULES_REPO_TOKEN:
-        required: false   # PAT with write access to SEMGREP_RULES_REPO
+        required: false   # PAT to read the security-pipeline repo from consumer repos
 
 permissions:
   contents: read
@@ -162,7 +160,7 @@ jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # L3 · Semgrep — SAST (diff-aware)
   # Scans only changed source files. Blocks on ERROR-severity findings.
-  # Pulls latest rules from SEMGREP_RULES_REPO secret if configured.
+  # Rules live in .security-tools/config/semgrep-custom-rules (same repo).
   # ────────────────────────────────────────────────────────────────────────────
   l3-semgrep:
     name: "L3 · Semgrep — SAST"
@@ -197,16 +195,6 @@ jobs:
           echo "Files queued for Semgrep ($(wc -l < /tmp/semgrep_targets.txt)):"
           cat /tmp/semgrep_targets.txt
 
-      - name: Pull external Semgrep rules
-        if: ${{ secrets.SEMGREP_RULES_REPO != '' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git clone --depth=1 \
-            "https://x-access-token:${GH_TOKEN}@github.com/${{ secrets.SEMGREP_RULES_REPO }}" \
-            /tmp/semgrep-rules-external \
-            || echo "Warning: external rules repo unavailable — using custom rules only"
-
       - name: Install Semgrep
         run: pip install semgrep==1.122.0
 
@@ -220,8 +208,6 @@ jobs:
           fi
 
           CONFIG_FLAGS="--config .security-tools/config/semgrep-custom-rules"
-          [ -d /tmp/semgrep-rules-external ] && \
-            CONFIG_FLAGS="$CONFIG_FLAGS --config /tmp/semgrep-rules-external"
 
           mapfile -t TARGET_FILES < /tmp/semgrep_targets.txt
 
@@ -285,7 +271,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          SEMGREP_RULES_REPO: ${{ secrets.SEMGREP_RULES_REPO }}
           RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
         run: python .security-tools/scripts/run_reviewer.py "$GITHUB_WORKSPACE" --force
 
