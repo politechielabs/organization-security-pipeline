@@ -11,14 +11,14 @@ on:
       RULES_REPO_TOKEN:
         required: false   # PAT with write access to SEMGREP_RULES_REPO
 
-  pull_request:
-    branches: [main, staging, dev]
-    types: [opened, synchronize, reopened]
-
 permissions:
   contents: read
   pull-requests: write
   security-events: write
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 # ─── Checkout pattern used by all scan jobs ───────────────────────────────────
 # Step 1: Checkout CALLER's code → default workspace (GITHUB_WORKSPACE)
@@ -49,16 +49,16 @@ jobs:
       - name: Checkout security tools
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.workflow_repository }}
-          ref: ${{ github.workflow_sha }}
+          repository: politechielabs/organization-security-pipeline
+          ref: main
           path: .security-tools
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install Gitleaks binary (no license needed)
         run: |
-          curl -sSfL \
-            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
-            | tar -xz -C /usr/local/bin gitleaks
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
           gitleaks version
 
       - name: Scan filesystem for secrets
@@ -68,6 +68,7 @@ jobs:
             --config .security-tools/config/gitleaks.toml \
             --source . \
             --no-git \
+            --exclude-path .security-tools \
             --exit-code 1 \
             --report-format sarif \
             --report-path gitleaks-fs.sarif
@@ -78,6 +79,7 @@ jobs:
           gitleaks detect \
             --config .security-tools/config/gitleaks.toml \
             --source . \
+            --exclude-path .security-tools \
             --exit-code 1 \
             --report-format sarif \
             --report-path gitleaks-git.sarif
@@ -132,10 +134,10 @@ jobs:
       - name: Checkout security tools
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.workflow_repository }}
-          ref: ${{ github.workflow_sha }}
+          repository: politechielabs/organization-security-pipeline
+          ref: main
           path: .security-tools
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.30.0
@@ -176,10 +178,14 @@ jobs:
       - name: Checkout security tools
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.workflow_repository }}
-          ref: ${{ github.workflow_sha }}
+          repository: politechielabs/organization-security-pipeline
+          ref: main
           path: .security-tools
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
 
       - name: Identify changed source files
         run: |
@@ -202,7 +208,7 @@ jobs:
             || echo "Warning: external rules repo unavailable — using custom rules only"
 
       - name: Install Semgrep
-        run: pip install semgrep
+        run: pip install semgrep==1.122.0
 
       - name: Run Semgrep
         run: |
@@ -260,14 +266,15 @@ jobs:
       - name: Checkout security tools
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.workflow_repository }}
-          ref: ${{ github.workflow_sha }}
+          repository: politechielabs/organization-security-pipeline
+          ref: main
           path: .security-tools
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: pip install anthropic pyyaml python-dotenv
