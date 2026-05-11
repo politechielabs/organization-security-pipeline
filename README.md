@@ -17,18 +17,32 @@ Reusable GitHub Actions security pipeline. Wire it into any repo in one step —
 
 ---
 
-## Quick start — wire up a repo
+## Setup — add this pipeline to your repo
 
-### Step 1 — Add the caller workflow
+Total time: ~10 minutes. No tool installs required — everything runs in GitHub Actions.
 
-In the target repo, create `.github/workflows/security.yml`:
+---
+
+### Prerequisites
+
+Before starting, make sure you have:
+
+- [ ] Admin access to the target repo (to add secrets and branch protection rules)
+- [ ] An Anthropic API key — create one at [console.anthropic.com](https://console.anthropic.com) → API Keys → Create key
+- [ ] Collaborator or owner access to `politechielabs/organization-security-pipeline` (to create a PAT for it)
+
+---
+
+### Step 1 — Add the caller workflow file
+
+In your target repo, create the file `.github/workflows/security.yml` with this content:
 
 ```yaml
 name: Security
 
 on:
   pull_request:
-    branches: [prod]  # only to be runned when in production 
+    branches: [main]                          # change to your default branch
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -41,105 +55,111 @@ jobs:
     secrets: inherit
 ```
 
-> `secrets: inherit` passes all repo secrets through automatically. Alternatively pass them explicitly — see the secrets table below.
+Commit and push this file to your default branch (not a feature branch — it must be on `main`/`master` for GitHub Actions to pick it up).
 
 ---
 
-### Step 2 — Create the required secrets
+### Step 2 — Get your Anthropic API key
 
-Secrets live in two places depending on their purpose. Navigate to **Settings → Secrets and variables → Actions → New repository secret** in the relevant repo.
-
----
-
-#### Secrets required in the **target repo** (the repo calling the pipeline)
-
-> e.g. `politechielabs/test-security` — any repo that has the caller workflow
-
-| Secret | Required | Description | How to get it |
-|--------|----------|-------------|---------------|
-| `CLAUDE_API_KEY` | **Yes** | Anthropic API key used by L4 to run Claude analysis and generate Semgrep rules | [console.anthropic.com](https://console.anthropic.com) → API Keys → Create key |
-| `RULES_REPO_TOKEN` | **Yes** | GitHub PAT with `contents:write` + `pull-requests:write` scope on the pipeline repo. Used by L4 to push auto-generated Semgrep rules as a PR | GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained → select `organization-security-pipeline` → allow Contents (write) + Pull requests (write) |
-
-> The caller workflow uses `secrets: inherit` — both secrets are automatically forwarded to the reusable pipeline. You do **not** need to list them explicitly unless you want to override values.
+1. Go to [console.anthropic.com](https://console.anthropic.com)
+2. Click **API Keys** in the left sidebar
+3. Click **Create Key**
+4. Name it (e.g. `github-security-pipeline`)
+5. Copy the key — it starts with `sk-ant-...`
+6. Save it somewhere temporarily — you'll add it in Step 4
 
 ---
 
-#### Secrets required in the **pipeline repo** (`organization-security-pipeline`)
+### Step 3 — Create a GitHub PAT for the pipeline repo
 
-> These are only needed if you run the pipeline locally or trigger it directly on the pipeline repo itself (not typical for most users).
+The pipeline needs permission to push auto-generated Semgrep rules back to `organization-security-pipeline` as a PR.
 
-| Secret | Required | Description | How to get it |
-|--------|----------|-------------|---------------|
-| `CLAUDE_API_KEY` | **Yes** (for local/direct runs) | Same Anthropic API key as above | [console.anthropic.com](https://console.anthropic.com) |
-| `GITHUB_TOKEN` | Auto-provided | GitHub automatically injects this — no action needed. Used for posting PR comments and reading PR metadata | Automatic |
+1. Go to **GitHub → Settings** (your personal settings, top-right avatar)
+2. Click **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
+3. Click **Generate new token**
+4. Set:
+   - **Token name**: `security-pipeline-rules`
+   - **Expiration**: 90 days (or No expiration)
+   - **Resource owner**: `politechielabs`
+   - **Repository access**: Only select repositories → `organization-security-pipeline`
+   - **Permissions → Repository permissions**:
+     - `Contents`: **Read and write**
+     - `Pull requests`: **Read and write**
+5. Click **Generate token**
+6. Copy the token — it starts with `github_pat_...`
 
 ---
 
-#### Full secrets checklist
+### Step 4 — Add secrets to your target repo
 
-Before running the pipeline for the first time, verify all of these are set in the **target repo**:
+Navigate to your target repo on GitHub:
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+Add these two secrets:
+
+| Secret name | Value |
+|-------------|-------|
+| `CLAUDE_API_KEY` | The `sk-ant-...` key from Step 2 |
+| `RULES_REPO_TOKEN` | The `github_pat_...` token from Step 3 |
+
+**Verify**: After saving, both secrets should appear in the list (values are hidden but names are shown). If either is missing the pipeline will not work correctly.
+
+> `GITHUB_TOKEN` is **not** listed here — GitHub injects it automatically into every workflow run. No setup needed.
+
+---
+
+### Step 5 — Enforce checks with branch protection
+
+Without this step the pipeline runs but cannot block a merge even if secrets or CVEs are found.
+
+1. Go to your target repo → **Settings → Branches**
+2. Click **Add branch protection rule** (or edit an existing rule for `main`)
+3. Set **Branch name pattern**: `main` (or your default branch name)
+4. Enable **Require status checks to pass before merging**
+5. Click inside the search box and add these three checks one by one:
+   ```
+   security / L1 · Gitleaks — Secrets
+   security / L2 · Trivy — SCA / CVE
+   security / L3 · Semgrep — SAST
+   ```
+   > These checks only appear in the search box after the pipeline has run at least once. Open a test PR first if they don't show up.
+6. Enable **Require branches to be up to date before merging**
+7. Click **Save changes**
+
+> Do **not** add `L4 · Claude` as a required check — it is advisory only and should never block merging.
+
+---
+
+### Step 6 — Open a test PR and verify
+
+1. Create a feature branch: `git checkout -b test/security-check`
+2. Make any small change (edit a comment, add a blank line)
+3. Push and open a pull request against `main`
+4. Go to the **Checks** tab of the PR
+
+You should see four checks appear:
 
 ```
-✅ CLAUDE_API_KEY       → Anthropic key (required for L4)
-✅ RULES_REPO_TOKEN     → PAT with write access to the pipeline repo (required for gap-rule PRs)
-✅ GITHUB_TOKEN         → Auto-injected by GitHub (no setup needed)
+✅ security / L1 · Gitleaks — Secrets
+✅ security / L2 · Trivy — SCA / CVE
+✅ security / L3 · Semgrep — SAST
+✅ security / L4 · Claude — Semantic Review + Rule Generation
 ```
 
-To verify secrets are present: **target repo → Settings → Secrets and variables → Actions** — you should see `CLAUDE_API_KEY` and `RULES_REPO_TOKEN` listed (values are hidden but presence is shown).
-
-> **If `RULES_REPO_TOKEN` is missing**: L4 will still run Claude analysis and post inline review comments, but the gap-rule PR step will fail silently (the job has `continue-on-error: true`).  
-> **If `CLAUDE_API_KEY` is missing**: The entire L4 job will crash with an authentication error from the Anthropic API.
+If all pass, the pipeline is working. L4 will post an inline review even on a clean PR (it scans the full file context, not just the diff).
 
 ---
 
-### Step 3 — Configure branch protection (recommended)
+### What to check if something goes wrong
 
-So that L1/L2/L3 failures actually block merging:
-
-1. Go to **Settings → Branches → Add branch protection rule**
-2. Branch name pattern: `main` (or your default branch)
-3. Enable **Require status checks to pass before merging**
-4. Search for and add these required checks:
-   - `security / L1 · Gitleaks — Secrets`
-   - `security / L2 · Trivy — SCA / CVE`
-   - `security / L3 · Semgrep — SAST`
-5. Enable **Require branches to be up to date before merging**
-6. Save
-
-> L4 (`security / L4 · Claude`) is intentionally excluded — it is advisory only and must never block merging.
-
----
-
-### Step 4 — Point gap rules at a shared rules repo
-
-When Claude finds a CRITICAL/HIGH vulnerability not covered by an existing Semgrep rule, it auto-generates a rule and raises a PR. By default that PR goes into the repo that triggered the workflow. To collect rules centrally across all repos:
-
-1. Create (or designate) a shared rules repo, e.g. `your-org/semgrep-rules`
-2. Generate a GitHub PAT with `contents:write` + `pull-requests:write` scope on that repo
-3. Add it as `RULES_REPO_TOKEN` in every caller repo's secrets
-4. In the caller workflow, set the env variable (or pass as a secret):
-
-```yaml
-jobs:
-  security:
-    uses: politechielabs/organization-security-pipeline/.github/workflows/security-pipeline.yml@main
-    secrets:
-      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-      RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
-```
-
-Gap-fill rule PRs will then land in `your-org/semgrep-rules` under `config/semgrep-custom-rules/custom_rules_<timestamp>.yml`.
-
----
-
-### Step 5 — Open a PR and watch it run
-
-Push a branch, open a pull request. The pipeline triggers automatically. You will see:
-
-- **Checks tab** — four status checks appear (`L1 · Gitleaks`, `L2 · Trivy`, `L3 · Semgrep`, `L4 · Claude`)
-- **PR comments** — L1/L2/L3 post a summary comment if they find anything
-- **PR review** — L4 posts inline review comments on the exact line of each finding
-- **New PR** (if Claude found gaps) — a `security/gap-rules-YYYYMMDD-HHMMSS` branch with generated Semgrep rules
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| All 4 checks never appear on the PR | Workflow file is on a feature branch, not `main` | Merge `.github/workflows/security.yml` to `main` first |
+| L4 crashes with authentication error | `CLAUDE_API_KEY` missing or wrong | Re-add the secret in Settings → Secrets |
+| L4 runs but gap-rules PR never appears | `RULES_REPO_TOKEN` missing or wrong scope | Re-create PAT with `contents:write` + `pull-requests:write` on the pipeline repo |
+| Status checks missing in branch protection search | Pipeline hasn't run yet | Open a test PR first, then come back and add the checks |
+| L1 detects secrets in old commits | Another branch in the repo has a secret commit in history | Delete that branch; git history is shared across branches |
 
 ---
 
