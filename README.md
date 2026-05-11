@@ -58,10 +58,9 @@ Secrets live in two places depending on their purpose. Navigate to **Settings �
 | Secret | Required | Description | How to get it |
 |--------|----------|-------------|---------------|
 | `CLAUDE_API_KEY` | **Yes** | Anthropic API key used by L4 to run Claude analysis and generate Semgrep rules | [console.anthropic.com](https://console.anthropic.com) → API Keys → Create key |
-| `RULES_REPO_TOKEN` | **Yes** (if using a shared rules repo) | GitHub PAT with `contents:write` + `pull-requests:write` scope on the pipeline/rules repo. Used by L4 to push generated Semgrep rules as a PR | GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained → select the pipeline repo → allow Contents (write) + Pull requests (write) |
-| `PIPELINE_TOKEN` | No | Alternative token name some org setups use in place of `RULES_REPO_TOKEN`. Set whichever name your L4 job references | Same as above |
+| `RULES_REPO_TOKEN` | **Yes** | GitHub PAT with `contents:write` + `pull-requests:write` scope on the pipeline repo. Used by L4 to push auto-generated Semgrep rules as a PR | GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained → select `organization-security-pipeline` → allow Contents (write) + Pull requests (write) |
 
-> The caller workflow uses `secrets: inherit` — all of the above are automatically forwarded to the reusable pipeline. You do **not** need to list them explicitly unless you want to override values.
+> The caller workflow uses `secrets: inherit` — both secrets are automatically forwarded to the reusable pipeline. You do **not** need to list them explicitly unless you want to override values.
 
 ---
 
