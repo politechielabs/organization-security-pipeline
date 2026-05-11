@@ -9,7 +9,7 @@ Reusable GitHub Actions security pipeline. Wire it into any repo in one step —
 | # | Tool | What it catches | Blocks PR? | PR feedback |
 |---|------|----------------|------------|-------------|
 | L1 | Gitleaks | Hardcoded secrets, credentials, tokens | Yes — any finding | Comment: table of leaked files + lines |
-| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL/HIGH | Comment: CVE table with package, severity, fix version |
+| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL only | Comment: CVE table with package, severity, fix version (HIGH/MEDIUM/LOW informational) |
 | L3 | Semgrep | SAST patterns (custom rules + community/GitLab packs) | Yes — ERROR severity | Comment: SAST findings table |
 | L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | No — advisory only | Inline review comments on exact file + line |
 
@@ -42,7 +42,7 @@ name: Security
 
 on:
   pull_request:
-    branches: [main]                          # change to your default branch
+    branches: [prod]                          # change to your prod branch 
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -294,7 +294,11 @@ If no relevant files changed, an empty SARIF is written and the job exits 0 imme
 
 **Rule loading:**
 
-All rules come from `config/semgrep-custom-rules/` in this repo — no Semgrep login, no remote registry, no internet-dependent rules. Auto-generated gap-fill rules from L4 land here as new numbered YAML files and are picked up automatically on the next run.
+Rules come from two sources:
+1. `config/semgrep-custom-rules/` in this repo (custom + auto-generated gap-fill rules)
+2. Semgrep Registry packs downloaded at runtime: `p/python`, `p/javascript`, `p/typescript`, `p/java`, `p/kotlin`, `p/secrets`
+
+No Semgrep login required. Registry packs stay fresh automatically.
 
 **Blocking threshold:**
 
@@ -375,7 +379,7 @@ Custom rules on top of the Gitleaks default set:
 
 Rules live as individual numbered YAML files (`custom_rules_1.yml`, `custom_rules_2.yml`, …). Each auto-generated run writes a new file — rule IDs never collide and Semgrep never silently skips duplicates.
 
-Also includes the full `config/community/` and `config/gitlab/` rule packs (scanned on L3 in addition to custom rules).
+L3 also pulls Semgrep Registry packs at runtime (`p/python`, `p/javascript`, `p/typescript`, `p/java`, `p/kotlin`, `p/secrets`) — no local copies needed.
 
 To add your own rules: create `config/semgrep-custom-rules/custom_rules_N.yml` following the existing format.
 
@@ -406,8 +410,7 @@ config/
   semgrep-custom-rules/
     custom_rules_1.yml           # Initial custom Semgrep rule set
     custom_rules_<timestamp>.yml # Auto-generated gap-fill rules (one per L4 run)
-  community/                     # Semgrep community rule packs
-  gitlab/                        # Semgrep GitLab rule packs
+  # community/ and gitlab/ not committed — registry packs downloaded at runtime
 
 scripts/
   run_reviewer.py                # 4-layer pipeline runner (local + CI entrypoint)
