@@ -172,8 +172,7 @@ jobs:
     name: "L3 · Semgrep — SAST"
     runs-on: ubuntu-latest
     needs: l2-trivy
-
-    steps:
+    if: always()  # run even if L2 found CVEs — all layers must execute
       - name: Checkout target code
         uses: actions/checkout@v4
         with:
@@ -243,7 +242,7 @@ jobs:
     name: "L4 · Claude — Semantic Review + Rule Generation"
     runs-on: ubuntu-latest
     needs: l3-semgrep
-    if: "!startsWith(github.head_ref, 'security/')"
+    if: "always() && !startsWith(github.head_ref, 'security/')"  # run even if L3 found issues
     # continue even if findings are detected — L4 never blocks the PR
     continue-on-error: true
     permissions:
