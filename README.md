@@ -222,7 +222,73 @@ Claude posts an inline review comment on the exact line with severity, CWE, OWAS
 
 ---
 
-## Self-healing rules loop
+## How each layer works in the code
+
+### L1 · Gitleaks
+
+Gitleaks runs **two independent scans** per PR — both write SARIF, results are merged and deduplicated before the comment is posted.
+
+| Scan | Flag | What it covers |
+|------|------|----------------|
+| Filesystem | `--no-git` | Every file in the current working tree — catches secrets added in this PR |
+| Git history | `--log-opts BASE_SHA..HEAD` | Only commits between the PR branch tip and the merge-base — prevents false positives from secrets on unrelated branches |
+
+`BASE_SHA` is computed with `git merge-base HEAD origin/<base_ref>` so the scan is always scoped to exactly the commits this PR introduces.
+
+Custom rules are loaded from `config/gitleaks.toml` (hardcoded passwords, HMAC secrets, cookie secrets, JWT literals, etc.). The job fails if the combined finding count from both SARIFs is > 0.
+
+---
+
+### L2 · Trivy
+
+Uses `aquasecurity/trivy-action` in **filesystem mode** (`scan-type: fs`) — scans `requirements.txt`, `package.json`, `go.sum`, and other dependency manifests for known CVEs.
+
+Key flags:
+
+| Flag | Value | Effect |
+|------|-------|--------|
+| `severity` | `CRITICAL,HIGH` | Only report CVEs at these levels — LOW/MEDIUM are skipped |
+| `ignore-unfixed` | `true` | Suppress CVEs that have no upstream fix yet (reduces noise) |
+| `exit-code` | `1` | Non-zero exit on any finding → blocks the PR job |
+| `skip-dirs` | `config/community,config/gitlab,.git,node_modules,vendor,.venv` | Excludes rule packs and vendored code |
+
+The SARIF output is parsed by an inline Python script that groups findings by package, adds severity icons (🔴 CRITICAL / 🟠 HIGH), and posts a single PR comment table with the CVE ID and the fixed version to upgrade to.
+
+---
+
+### L3 · Semgrep
+
+Semgrep runs **diff-aware** — it only scans files that changed in this PR, not the full codebase.
+
+**How diff-awareness works:**
+
+```
+git diff --name-only origin/<base_ref>...HEAD
+  → filter to supported extensions (.py .js .ts .java .go .rb .php ...)
+  → filter to files that still exist (not deleted)
+  → write list to /tmp/semgrep_targets.txt
+  → pass as positional arguments to semgrep
+```
+
+If no relevant files changed, an empty SARIF is written and the job exits 0 immediately — no Semgrep install cost.
+
+**Rule loading:**
+
+All rules come from `config/semgrep-custom-rules/` in this repo — no Semgrep login, no remote registry, no internet-dependent rules. Auto-generated gap-fill rules from L4 land here as new numbered YAML files and are picked up automatically on the next run.
+
+**Blocking threshold:**
+
+```bash
+semgrep --config .security-tools/config/semgrep-custom-rules \
+        --severity ERROR \
+        --error \
+        --sarif --output semgrep-results.sarif \
+        <changed files>
+```
+
+`--severity ERROR` filters output to `severity: ERROR` rules only. `--error` makes semgrep exit non-zero when any ERROR finding exists. Rules with `severity: WARNING` appear in the SARIF but do not trigger the non-zero exit — they are shown in the PR comment as advisory.
+
+---
 
 After L4 runs, the pipeline automatically generates Semgrep rules for any CRITICAL/HIGH finding not already covered by an existing rule (matched by CWE ID). Rules are generated via Claude in batches of 3.
 
