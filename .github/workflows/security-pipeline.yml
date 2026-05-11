@@ -80,10 +80,13 @@ jobs:
         continue-on-error: true   # collect both reports before failing
 
       - name: Scan git history for secrets
+        # --log-opts limits scan to commits added by this PR (not all branches)
         run: |
+          BASE_SHA=$(git merge-base HEAD origin/${{ github.base_ref }} 2>/dev/null || git rev-parse HEAD^)
           gitleaks detect \
             --config .security-tools/config/gitleaks.toml \
             --source . \
+            --log-opts "${BASE_SHA}..HEAD" \
             --exit-code 1 \
             -f sarif \
             -r gitleaks-git.sarif
