@@ -16,12 +16,14 @@ Guidelines:
 2. Use YAML folded style (`>-`) for `message`.
 3. Metadata MUST include at minimum: `cwe`, `category`, `subcategory`.
 4. Output ONLY valid Semgrep YAML starting with `rules:`. Do not include markdown, comments, explanations, or extra text.
-5. CRITICAL — Pattern validity: emit only patterns you are fully confident are valid Semgrep syntax. Prefer simpler provably-valid patterns over complex AST chains that may fail to parse.
-6. CRITICAL — Avoid overly complex chained Java AST patterns. Prefer smaller composable patterns instead of deeply nested builder chains or inline constructor chains.
-7. CRITICAL — Any pattern containing `{`, `[`, `:`, `#`, or `<` MUST use YAML block scalars (`|` or `|-`).
-8. CRITICAL — Use exactly `...` (three dots) for Semgrep ellipsis.
-9. CRITICAL — Every `patterns:` entry MUST contain at least one valid child pattern.
-10. CRITICAL — For Java, any assignment or method-call statement used in a Semgrep pattern MUST end with a semicolon (`;`). Incomplete Java statements are invalid Semgrep patterns.
+5. CRITICAL — `severity` MUST be exactly one of: `ERROR`, `WARNING`, `INFO`. Never use `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` — those are not valid Semgrep severity values and will cause the rule to be silently ignored. Map as: critical/high severity vuln → `ERROR`, medium → `WARNING`, low → `INFO`.
+6. CRITICAL — Pattern validity: emit only patterns you are fully confident are valid Semgrep syntax. Prefer simpler provably-valid patterns over complex AST chains that may fail to parse.
+7. CRITICAL — Avoid overly complex chained Java AST patterns. Prefer smaller composable patterns instead of deeply nested builder chains or inline constructor chains.
+8. CRITICAL — Any pattern containing `{`, `[`, `:`, `#`, or `<` MUST use YAML block scalars (`|` or `|-`). Any metadata string value containing `: ` (colon-space) MUST be double-quoted (e.g., `subcategory: "Foo (contents: write)"`).
+9. CRITICAL — Use exactly `...` (three dots) for Semgrep ellipsis.
+10. CRITICAL — Every `patterns:` entry MUST contain at least one valid child pattern.
+11. CRITICAL — For Java, any assignment or method-call statement used in a Semgrep pattern MUST end with a semicolon (`;`). Incomplete Java statements are invalid Semgrep patterns.
+12. CRITICAL — Never use `pattern-where-python` — it is deprecated and will cause a parse error in all Semgrep versions >= 1.0.
 
 EXAMPLES:
 Input:
@@ -30,7 +32,7 @@ Output:
 rules:
   - id: custom.gap-hardcoded-jwt-secrets-java
     languages: [java]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       Hardcoded JWT signing secret detected. Any attacker with source or binary access can
       forge tokens and impersonate any user. Store the secret in environment variables or
@@ -51,7 +53,7 @@ Output:
 rules:
   - id: custom.gap-os-command-injection-js
     languages: [javascript, typescript]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       User-controlled input flows into a shell command. An attacker can inject OS commands
       and gain full system access. Use child_process.execFile with an argument array
@@ -77,7 +79,7 @@ rules:
           - focus-metavariable: $CMD
   - id: custom.gap-os-command-injection-py
     languages: [python]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       User-controlled input flows into a shell command. Use subprocess with a list argument
       and shell=False, or shlex.quote to escape values (CWE-78).
@@ -107,7 +109,7 @@ Output:
 rules:
   - id: custom.gap-jwt-token-forgery-js
     languages: [javascript, typescript]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       Insecure JWT verification detected. Passing algorithms none, omitting the algorithms
       option, or disabling signature verification allows attackers to forge tokens. Always

@@ -637,6 +637,23 @@ def _sanitize_yaml_patterns(text: str) -> str:
     return pat.sub(_fix, text)
 
 
+_INVALID_SEV = re.compile(
+    r'^(\s+severity:\s*)(CRITICAL|HIGH|MEDIUM|LOW)\s*$',
+    re.MULTILINE | re.IGNORECASE,
+)
+_SEV_MAP = {"CRITICAL": "ERROR", "HIGH": "ERROR", "MEDIUM": "WARNING", "LOW": "INFO"}
+
+def _fix_rule_severities(text: str) -> str:
+    """Replace invalid Semgrep severity labels with valid ones (ERROR/WARNING/INFO)."""
+    def _replace(m: re.Match) -> str:
+        mapped = _SEV_MAP.get(m.group(2).upper(), "ERROR")
+        return f"{m.group(1)}{mapped}"
+    fixed = _INVALID_SEV.sub(_replace, text)
+    if fixed != text:
+        print("  [RuleGen] Auto-corrected invalid severity values → ERROR/WARNING/INFO")
+    return fixed
+
+
 def _merge_yaml_blocks(blocks: list[str]) -> str:
     entries: list[str] = []
     for block in blocks:
@@ -717,7 +734,7 @@ def generate_semgrep_rules(
         all_blocks.append(text)
         print(f"      {len(text)} chars")
 
-    final_yaml = _sanitize_yaml_patterns(_merge_yaml_blocks(all_blocks))
+    final_yaml = _fix_rule_severities(_sanitize_yaml_patterns(_merge_yaml_blocks(all_blocks)))
 
     try:
         parsed     = yaml.safe_load(final_yaml)
