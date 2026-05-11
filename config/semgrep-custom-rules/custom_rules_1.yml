@@ -17,7 +17,7 @@ rules:
   - pattern: JWT.decode($TOKEN)
   - pattern: $PARSER.setSigningKey("...")
   - pattern: Jwts.builder().signWith($ALG, "...")
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-jwt-token-forgery-xml
   languages:
   - xml
@@ -39,7 +39,7 @@ rules:
   - pattern: '<string name="jwt_token">...</string>
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-ace-third-party-libs-kotlin
   languages:
   - kotlin
@@ -60,7 +60,7 @@ rules:
   - pattern: Class.forName($CLASS)
   - pattern: ObjectInputStream($STREAM).readObject()
   - pattern: $METHOD.invoke($OBJ, ...)
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-ace-third-party-libs-xml
   languages:
   - xml
@@ -84,7 +84,7 @@ rules:
   - pattern: '<uses-feature android:name="android.hardware.type.embedded" .../>
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-content-provider-kotlin
   languages:
   - kotlin
@@ -111,7 +111,7 @@ rules:
       '
   - pattern: enforceCallingOrSelfPermission(null, ...)
   - pattern: enforceCallingOrSelfUriPermission($URI, 0, ...)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-content-provider-xml
   languages:
   - xml
@@ -125,7 +125,7 @@ rules:
   pattern: '<provider android:exported="true" ...>...</provider>
 
     '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-predictable-endpoints-kotlin
   languages:
   - kotlin
@@ -147,7 +147,7 @@ rules:
       '
   - pattern: Random().nextInt(...)
   - pattern: System.currentTimeMillis()
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-predictable-endpoints-xml
   languages:
   - xml
@@ -168,7 +168,7 @@ rules:
   - pattern: '<action android:name="android.intent.action.VIEW" .../>
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-unprotected-data-uri-webview-kotlin
   languages:
   - kotlin
@@ -188,7 +188,7 @@ rules:
   - pattern: $WV.settings.allowFileAccessFromFileURLs = true
   - pattern: $WV.settings.javaScriptEnabled = true
   - pattern: $WV.loadUrl($URL)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-unprotected-data-uri-webview-xml
   languages:
   - xml
@@ -202,7 +202,7 @@ rules:
   pattern: '<activity android:exported="true" ...>...</activity>
 
     '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-local-file-theft-chooser-kotlin
   languages:
   - kotlin
@@ -224,7 +224,7 @@ rules:
 
       '
   - pattern: FileProvider.getUriForFile($CTX, $AUTH, $FILE)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-local-file-theft-chooser-xml
   languages:
   - xml
@@ -242,7 +242,7 @@ rules:
   - pattern: '<data android:scheme="file" .../>
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-broadcast-receiver-kotlin
   languages:
   - kotlin
@@ -260,7 +260,7 @@ rules:
   - pattern: sendBroadcast($INTENT)
   - pattern: sendOrderedBroadcast($INTENT, null)
   - pattern: LocalBroadcastManager.getInstance($CTX).registerReceiver(...)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-broadcast-receiver-xml
   languages:
   - xml
@@ -274,7 +274,7 @@ rules:
   pattern: '<receiver android:exported="true" ...>...</receiver>
 
     '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-fileprovider-paths-kotlin
   languages:
   - kotlin
@@ -294,7 +294,7 @@ rules:
   - pattern: '$INTENT.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-fileprovider-paths-xml
   languages:
   - xml
@@ -321,7 +321,7 @@ rules:
   - pattern: '<external-files-path name="..." path="/" .../>
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-implicit-intent-sensitive-data-kotlin
   languages:
   - kotlin
@@ -353,7 +353,7 @@ rules:
     - metavariable-regex:
         metavariable: $KEY
         regex: (?i).*(password|passwd|token|secret|credential|auth|apikey|api_key|ssn|pin).*
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-implicit-intent-sensitive-data-xml
   languages:
   - xml
@@ -370,7 +370,7 @@ rules:
       </receiver>\n"
   - pattern: "<activity android:exported=\"true\" ...>\n  <intent-filter>...</intent-filter>\n\
       </activity>\n"
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-implicit-intent-arbitrary-url-kotlin
   languages:
   - kotlin
@@ -399,7 +399,7 @@ rules:
   - pattern: intent.dataString
   - pattern: $INTENT.getStringExtra(...)
   - pattern: $INTENT.data
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-implicit-intent-arbitrary-url-xml
   languages:
   - xml
@@ -413,7 +413,7 @@ rules:
     subcategory: Intercepting Implicit Intent to load arbitrary URL
   pattern: "<intent-filter>\n  <action android:name=\"android.intent.action.VIEW\"\
     \ />\n  <data android:scheme=\"http\" />\n</intent-filter>\n"
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-insecure-logging-credentials-kotlin
   languages:
   - kotlin
@@ -438,7 +438,7 @@ rules:
         regex: (?i).*(password|passwd|token|secret|credential|auth|apikey|pin).*
   - pattern: Log.$LEVEL($TAG, "..." + $PASSWORD + "...")
   - pattern: println($CRED)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-logging-credentials-xml
   languages:
   - xml
@@ -453,7 +453,7 @@ rules:
   pattern: '<application android:debuggable="true" ...>...</application>
 
     '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-null-byte-bypass-js
   languages:
   - javascript
@@ -485,7 +485,7 @@ rules:
   - pattern: req.body.$FIELD
   - pattern: req.query.$FIELD
   - pattern: req.params.$FIELD
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-null-byte-bypass-python
   languages:
   - python
@@ -515,7 +515,7 @@ rules:
   - pattern: request.args.get(...)
   - pattern: request.json.get(...)
   - pattern: request.data
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-null-byte-bypass-yaml
   languages:
   - yaml
@@ -534,7 +534,7 @@ rules:
   - pattern: 'minLength: 0
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-null-byte-bypass-xml
   languages:
   - xml
@@ -555,7 +555,7 @@ rules:
   - pattern: '<validation minlength="0" />
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-ssti-js
   languages:
   - javascript
@@ -589,7 +589,7 @@ rules:
   - pattern: req.body.$INPUT
   - pattern: req.query.$INPUT
   - pattern: req.params.$INPUT
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-ssti-python
   languages:
   - python
@@ -622,7 +622,7 @@ rules:
   - pattern: request.args.get(...)
   - pattern: request.form.get(...)
   - pattern: request.json.get(...)
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-ssti-yaml
   languages:
   - yaml
@@ -643,7 +643,7 @@ rules:
   - pattern: 'content: "{% $BLOCK %}"
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-ssti-xml
   languages:
   - xml
@@ -662,7 +662,7 @@ rules:
   - pattern: '<param name="..." value="${ $EXPR }" />
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-logic-flaw-js
   languages:
   - javascript
@@ -697,7 +697,7 @@ rules:
   - pattern: req.body.$FIELD
   - pattern: req.query.$FIELD
   - pattern: req.params.$FIELD
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-logic-flaw-python
   languages:
   - python
@@ -727,7 +727,7 @@ rules:
   - pattern: request.form.get(...)
   - pattern: request.args.get(...)
   - pattern: request.json.get(...)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-logic-flaw-yaml
   languages:
   - yaml
@@ -749,7 +749,7 @@ rules:
   - pattern: 'wallet_limit: 0
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-wallet-logic-flaw-xml
   languages:
   - xml
@@ -771,7 +771,7 @@ rules:
   - pattern: '<limit type="score" max="unlimited" />
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-captcha-bypass-js
   languages:
   - javascript
@@ -800,7 +800,7 @@ rules:
     - metavariable-regex:
         metavariable: $ROUTE
         regex: (?i).*(register|signup|login|reset|forgot).*
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-captcha-bypass-python
   languages:
   - python
@@ -822,7 +822,7 @@ rules:
   - pattern: RECAPTCHA_ENABLED = False
   - patterns:
     - pattern: "if $APP.debug:\n    ...\nelse:\n    $CAPTCHA.verify(...)\n"
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-captcha-bypass-yaml
   languages:
   - yaml
@@ -840,7 +840,7 @@ rules:
   - pattern: 'captcha_bypass: true
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-captcha-bypass-xml
   languages:
   - xml
@@ -861,7 +861,7 @@ rules:
   - pattern: '<recaptcha enabled="false" />
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-idor-js
   languages:
   - javascript
@@ -899,7 +899,7 @@ rules:
   - pattern: req.params.$ID
   - pattern: req.query.$ID
   - pattern: req.body.$ID
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-idor-python
   languages:
   - python
@@ -933,7 +933,7 @@ rules:
   - pattern: request.form.get(...)
   - pattern: request.json.get(...)
   - pattern: request.view_args.get(...)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-idor-yaml
   languages:
   - yaml
@@ -950,7 +950,7 @@ rules:
 
       '
   - pattern: "access_control:\n  enforce: false\n"
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-hardcoded-jwt-secrets-kotlin
   languages:
   - kotlin
@@ -968,7 +968,7 @@ rules:
   - pattern: $PARSER.setSigningKey("...")
   - pattern: Keys.hmacShaKeyFor("...".toByteArray(...))
   - pattern: Keys.hmacShaKeyFor("...".toByteArray())
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-hardcoded-jwt-secrets-xml
   languages:
   - xml
@@ -983,7 +983,7 @@ rules:
   - pattern-regex: <string\s+name="[^"]*(?:jwt|token|signing)[^"]*">[^<]{8,}</string>
   - pattern-regex: <property\s+name="[^"]*(?:jwt|jwtSecret|signingKey)[^"]*"\s+value="[^"]{8,}"
   - pattern-regex: <entry\s+key="[^"]*(?:jwt|signingKey|jwtSecret)[^"]*"\s+value="[^"]{8,}"
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-hardcoded-credentials-kotlin
   languages:
   - kotlin
@@ -1013,7 +1013,7 @@ rules:
         regex: (?i).*(password|passwd|pwd|secret|apikey|api_key|token|credential|auth_token).*
   - pattern: LoginCredentials("...", "...")
   - pattern: Credentials("...", "...")
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-hardcoded-credentials-xml
   languages:
   - xml
@@ -1029,7 +1029,7 @@ rules:
   - pattern-regex: <string\s+name="[^"]*(?:password|passwd|pwd|secret|api_key|apikey|auth_token|credential)[^"]*">[^<]{4,}</string>
   - pattern-regex: android:password="[^"]+"
   - pattern-regex: meta-data\s[^>]*android:name="[^"]*(?:password|secret|api_key|apikey)[^"]*"\s[^>]*android:value="[^"]+"
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-aws-cognito-misconfiguration-kotlin
   languages:
   - kotlin
@@ -1055,7 +1055,7 @@ rules:
   - pattern: CognitoUserPool($CONTEXT, "...", "...", "...")
   - pattern: AmazonCognitoIdentityClient(BasicAWSCredentials("...", "..."))
   - pattern: CognitoUserPoolsSignInProvider.init($CONTEXT, "...", "...", "...", ...)
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-aws-cognito-misconfiguration-xml
   languages:
   - xml
@@ -1071,7 +1071,7 @@ rules:
   - pattern-regex: CognitoIdentityPoolId\s*=\s*"[^"]+
   - pattern-regex: aws_user_pools_id\s*=\s*"[^"]+
   - pattern-regex: aws_cognito_identity_pool_id\s*=\s*"[^"]+
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-ssl-certificate-validation-kotlin
   languages:
   - kotlin
@@ -1097,7 +1097,7 @@ rules:
     - metavariable-regex:
         metavariable: $HV
         regex: (?i).*(allow|trust|accept|noop|insecure|bypass).*
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-ssl-certificate-validation-xml
   languages:
   - xml
@@ -1115,7 +1115,7 @@ rules:
   - pattern-regex: <certificates\s+src="user">
   - pattern-regex: android:usesCleartextTraffic\s*=\s*"true"
   - pattern-regex: <trust-anchors>\s*<certificates\s+src="all"\s*/>
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-insecure-data-storage-kotlin
   languages:
   - kotlin
@@ -1145,7 +1145,7 @@ rules:
     - metavariable-regex:
         metavariable: $QUERY
         regex: (?i).*(?:password|secret|token).*
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-insecure-data-storage-xml
   languages:
   - xml
@@ -1163,7 +1163,7 @@ rules:
   - pattern-regex: android:fullBackupOnly\s*=\s*"true"
   - pattern-regex: <string\s+name="[^"]*(?:password|passwd|pwd|secret|token|credential)[^"]*">[^<]{4,}</string>
   - pattern-regex: android:name="[^"]*(?:password|secret|token)[^"]*"\s+android:value="[^"]+"
-  severity: HIGH
+  severity: ERROR
 
 - id: custom.gap-login-weak-auth-js
   languages:
@@ -1205,7 +1205,7 @@ rules:
   - pattern: '$USER.isAdmin = req.body.isAdmin;
 
       '
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-login-weak-auth-python
   languages:
   - python
@@ -1229,7 +1229,7 @@ rules:
   - pattern: '$USER.role = request.json.get(...)
 
       '
-  severity: CRITICAL
+  severity: ERROR
 - id: custom.gap-login-weak-auth-yaml
   languages:
   - yaml
@@ -1259,7 +1259,7 @@ rules:
       '
   - pattern: "admin:\n  password: admin\n"
   - pattern: "admin:\n  password: password\n"
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-login-weak-auth-xml
   languages:
   - xml
@@ -1290,7 +1290,7 @@ rules:
   - pattern: '<credential username="admin" password="admin"/>
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-scoreboard-logic-js
   languages:
   - javascript
@@ -1343,7 +1343,7 @@ rules:
       $OBJ.balance -= $AMOUNT;
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-scoreboard-logic-python
   languages:
   - python
@@ -1396,7 +1396,7 @@ rules:
   - pattern: '$USER.score = request.form.get(...)
 
       '
-  severity: HIGH
+  severity: ERROR
 - id: custom.gap-wallet-scoreboard-logic-yaml
   languages:
   - yaml
@@ -1427,7 +1427,7 @@ rules:
   - pattern: 'bypass_wallet_check: true
 
       '
-  severity: MEDIUM
+  severity: WARNING
 - id: custom.gap-wallet-scoreboard-logic-xml
   languages:
   - xml
@@ -1460,4 +1460,4 @@ rules:
       <param-value>true</param-value>
 
       '
-  severity: MEDIUM
+  severity: WARNING

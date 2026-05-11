@@ -2,7 +2,7 @@
 rules:
   - id: custom.gap-sql-injection-string-concat-py
     languages: [python]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       User-controlled input is concatenated directly into a SQL query string. An attacker
       can manipulate the query to read, modify, or delete arbitrary data. Use parameterized
@@ -55,7 +55,7 @@ rules:
 
   - id: custom.gap-weak-hash-md5-password-py
     languages: [python]
-    severity: HIGH
+    severity: ERROR
     message: >-
       MD5 is a cryptographically broken hash function and must not be used for password
       hashing. Its speed and known collision vulnerabilities allow offline brute-force and
@@ -73,9 +73,6 @@ rules:
       - pattern: hashlib.new("MD5", ...)
       - pattern: |-
           hashlib.new('MD5', ...)
-      - patterns:
-          - pattern: $H = hashlib.new($ALG, ...)
-          - pattern-where-python: 'vars["$ALG"].lower() == "md5"'
       - pattern: Crypto.Hash.MD5.new(...)
       - pattern: Cryptodome.Hash.MD5.new(...)
       - pattern: passlib.hash.md5_crypt.hash(...)
@@ -84,7 +81,7 @@ rules:
 
   - id: custom.gap-mass-assignment-discount-field-py
     languages: [python]
-    severity: HIGH
+    severity: ERROR
     message: >-
       User-controlled request data flows directly into a sensitive model field (e.g.
       discount, price, role) without field-level filtering. An attacker can supply
@@ -143,7 +140,7 @@ rules:
 
   - id: custom.gap-predictable-password-reset-token-md5-py
     languages: [python]
-    severity: HIGH
+    severity: ERROR
     message: >-
       A password-reset token is derived by hashing a timestamp with MD5. Timestamps are
       trivially guessable, and MD5 is not a suitable CSPRNG substitute. An attacker can
@@ -187,7 +184,7 @@ rules:
 
   - id: custom.gap-missing-authz-delete-account-py
     languages: [python]
-    severity: CRITICAL
+    severity: ERROR
     message: >-
       The delete_account handler appears to lack an authorization decorator or explicit
       identity verification. Any authenticated (or unauthenticated) caller may be able to
@@ -248,7 +245,7 @@ rules:
 
   - id: custom.gap-overly-permissive-gha-contents-write
     languages: [generic]
-    severity: HIGH
+    severity: ERROR
     message: >-
       This GitHub Actions workflow grants contents:write permission at the job or workflow
       level. This allows any step in the workflow — including compromised third-party
@@ -258,11 +255,11 @@ rules:
     metadata:
       cwe: CWE-732
       category: Injection
-      subcategory: Overly Permissive GitHub Actions Permissions (contents: write)
+      subcategory: "Overly Permissive GitHub Actions Permissions (contents: write)"
     paths:
       include:
-        - .github/workflows/*.yml
-        - .github/workflows/*.yaml
+        - "**/.github/workflows/*.yml"
+        - "**/.github/workflows/*.yaml"
     pattern: |
       permissions:
         ...

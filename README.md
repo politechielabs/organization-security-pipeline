@@ -28,7 +28,7 @@ name: Security
 
 on:
   pull_request:
-    branches: [main, staging, dev]
+    branches: [prod]  # only to be runned when in production 
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -47,12 +47,49 @@ jobs:
 
 ### Step 2 — Create the required secrets
 
-In the target repo: **Settings → Secrets and variables → Actions → New repository secret**
+Secrets live in two places depending on their purpose. Navigate to **Settings → Secrets and variables → Actions → New repository secret** in the relevant repo.
 
-| Secret | Required | What to put |
-|--------|----------|-------------|
-| `CLAUDE_API_KEY` | **Yes** | Anthropic API key — get one at [console.anthropic.com](https://console.anthropic.com) |
-| `RULES_REPO_TOKEN` | No | GitHub PAT for pushing gap-fill rules to the rules repo (see Step 4) |
+---
+
+#### Secrets required in the **target repo** (the repo calling the pipeline)
+
+> e.g. `politechielabs/test-security` — any repo that has the caller workflow
+
+| Secret | Required | Description | How to get it |
+|--------|----------|-------------|---------------|
+| `CLAUDE_API_KEY` | **Yes** | Anthropic API key used by L4 to run Claude analysis and generate Semgrep rules | [console.anthropic.com](https://console.anthropic.com) → API Keys → Create key |
+| `RULES_REPO_TOKEN` | **Yes** (if using a shared rules repo) | GitHub PAT with `contents:write` + `pull-requests:write` scope on the pipeline/rules repo. Used by L4 to push generated Semgrep rules as a PR | GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained → select the pipeline repo → allow Contents (write) + Pull requests (write) |
+| `PIPELINE_TOKEN` | No | Alternative token name some org setups use in place of `RULES_REPO_TOKEN`. Set whichever name your L4 job references | Same as above |
+
+> The caller workflow uses `secrets: inherit` — all of the above are automatically forwarded to the reusable pipeline. You do **not** need to list them explicitly unless you want to override values.
+
+---
+
+#### Secrets required in the **pipeline repo** (`organization-security-pipeline`)
+
+> These are only needed if you run the pipeline locally or trigger it directly on the pipeline repo itself (not typical for most users).
+
+| Secret | Required | Description | How to get it |
+|--------|----------|-------------|---------------|
+| `CLAUDE_API_KEY` | **Yes** (for local/direct runs) | Same Anthropic API key as above | [console.anthropic.com](https://console.anthropic.com) |
+| `GITHUB_TOKEN` | Auto-provided | GitHub automatically injects this — no action needed. Used for posting PR comments and reading PR metadata | Automatic |
+
+---
+
+#### Full secrets checklist
+
+Before running the pipeline for the first time, verify all of these are set in the **target repo**:
+
+```
+✅ CLAUDE_API_KEY       → Anthropic key (required for L4)
+✅ RULES_REPO_TOKEN     → PAT with write access to the pipeline repo (required for gap-rule PRs)
+✅ GITHUB_TOKEN         → Auto-injected by GitHub (no setup needed)
+```
+
+To verify secrets are present: **target repo → Settings → Secrets and variables → Actions** — you should see `CLAUDE_API_KEY` and `RULES_REPO_TOKEN` listed (values are hidden but presence is shown).
+
+> **If `RULES_REPO_TOKEN` is missing**: L4 will still run Claude analysis and post inline review comments, but the gap-rule PR step will fail silently (the job has `continue-on-error: true`).  
+> **If `CLAUDE_API_KEY` is missing**: The entire L4 job will crash with an authentication error from the Anthropic API.
 
 ---
 
@@ -323,4 +360,4 @@ MEDIUM/LOW findings appear in the PR review body as advisory but do not block me
 | L2 blocks on dependencies you can't update yet | A CVE has no upstream fix yet | Add it to `trivy-comprehensive.yaml` under `vulnerability.ignore-unfixed` |
 | L3 finds 0 issues on Python/JS code | Custom rules are language-specific — check `config/semgrep-custom-rules/` for coverage | Add rules or enable community pack for that language |
 | L4 inline comments don't appear | Findings reference files not changed in this PR | Findings for unchanged files appear in the PR review body instead |
-| Gap rules PR goes to wrong repo | `RULES_REPO_TOKEN` not set or `SEMGREP_RULES_REPO` env not pointing at target repo | Set `RULES_REPO_TOKEN` secret and verify `SEMGREP_RULES_REPO` in the L4 job env |
+| Gap rules PR goes to wrong repo | `RULES_REPO_TOKEN` not set or pointing at wrong repo | Set `RULES_REPO_TOKEN` secret in the target repo — must be a PAT with `contents:write` + `pull-requests:write` on the pipeline/rules repo |
