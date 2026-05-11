@@ -99,6 +99,80 @@ jobs:
             gitleaks-git.sarif
           retention-days: 14
 
+      - name: Comment secrets findings on PR
+        if: always() && github.event.pull_request.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+          from collections import defaultdict
+
+          def load_sarif(path):
+              try:
+                  return json.load(open(path))["runs"][0]["results"]
+              except Exception:
+                  return []
+
+          fs_results  = load_sarif("gitleaks-fs.sarif")
+          git_results = load_sarif("gitleaks-git.sarif")
+          all_results = fs_results + git_results
+
+          if not all_results:
+              print("No secrets — skipping comment")
+              exit(0)
+
+          # Deduplicate by (file, line, rule)
+          seen = set()
+          rows = []
+          for r in all_results:
+              rule = r.get("ruleId", "unknown")
+              loc  = r.get("locations", [{}])[0].get("physicalLocation", {})
+              path = loc.get("artifactLocation", {}).get("uri", "?")
+              line = loc.get("region", {}).get("startLine", "?")
+              key  = (rule, path, str(line))
+              if key in seen:
+                  continue
+              seen.add(key)
+              rows.append((rule, path, line))
+
+          lines = [
+              "## 🔴 L1 · Gitleaks — PR Blocked",
+              "",
+              f"Found **{len(rows)} secret(s)** hardcoded in the repository.",
+              "",
+              "| Rule | File | Line |",
+              "|------|------|------|",
+          ]
+          for rule, path, line in sorted(rows):
+              lines.append(f"| `{rule}` | `{path}` | {line} |")
+
+          lines += [
+              "",
+              "> **Action required:** Remove the exposed secret(s), rotate any leaked credentials, and re-push.",
+              "> Use environment variables or a secret manager instead of hardcoding values.",
+          ]
+
+          body   = "\n".join(lines)
+          token  = os.environ["GITHUB_TOKEN"]
+          repo   = os.environ["REPO"]
+          pr_num = os.environ["PR_NUMBER"]
+          url    = f"https://api.github.com/repos/{repo}/issues/{pr_num}/comments"
+          data   = json.dumps({"body": body}).encode()
+          req    = urllib.request.Request(url, data=data, headers={
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json",
+          })
+          try:
+              urllib.request.urlopen(req)
+              print(f"  ✅ Secrets summary posted to PR #{pr_num}")
+          except urllib.error.HTTPError as e:
+              print(f"  ⚠️  Could not post comment: {e.code} {e.read().decode()}")
+          EOF
+
       - name: Fail if secrets found
         # Re-check exit codes from both scans so the job fails correctly
         run: |
@@ -298,6 +372,65 @@ jobs:
           name: semgrep-sarif-${{ github.run_id }}
           path: semgrep-results.sarif
           retention-days: 14
+
+      - name: Comment SAST findings on PR
+        if: always() && github.event.pull_request.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+
+          try:
+              sarif = json.load(open("semgrep-results.sarif"))
+              results = sarif["runs"][0]["results"]
+          except Exception:
+              results = []
+
+          if not results:
+              print("No SAST findings — skipping comment")
+              exit(0)
+
+          lines = [
+              "## ❌ L3 · Semgrep — PR Blocked",
+              "",
+              f"Found **{len(results)} SAST finding(s)** in changed files.",
+              "",
+              "| Rule | File | Line | Message |",
+              "|------|------|------|---------|",
+          ]
+          for r in results:
+              rule = r.get("ruleId", "unknown").split(".")[-1]
+              loc  = r.get("locations", [{}])[0].get("physicalLocation", {})
+              path = loc.get("artifactLocation", {}).get("uri", "?")
+              line = loc.get("region", {}).get("startLine", "?")
+              msg  = r.get("message", {}).get("text", "")[:120].replace("|", "\\|").split("\n")[0]
+              lines.append(f"| `{rule}` | `{path}` | {line} | {msg} |")
+
+          lines += [
+              "",
+              "> **Action required:** Fix the issues above before this PR can be merged.",
+          ]
+
+          body   = "\n".join(lines)
+          token  = os.environ["GITHUB_TOKEN"]
+          repo   = os.environ["REPO"]
+          pr_num = os.environ["PR_NUMBER"]
+          url    = f"https://api.github.com/repos/{repo}/issues/{pr_num}/comments"
+          data   = json.dumps({"body": body}).encode()
+          req    = urllib.request.Request(url, data=data, headers={
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json",
+          })
+          try:
+              urllib.request.urlopen(req)
+              print(f"  ✅ SAST summary posted to PR #{pr_num}")
+          except urllib.error.HTTPError as e:
+              print(f"  ⚠️  Could not post comment: {e.code} {e.read().decode()}")
+          EOF
 
   # ────────────────────────────────────────────────────────────────────────────
   # L4 · Claude — Semantic Triage + Semgrep Rule Generation
