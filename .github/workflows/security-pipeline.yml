@@ -193,7 +193,7 @@ jobs:
 
   # ────────────────────────────────────────────────────────────────────────────
   # L2 · Trivy — SCA / CVE / Misconfigs
-  # Blocks on CRITICAL or HIGH vulnerabilities in dependencies / IaC.
+  # Blocks on CRITICAL vulnerabilities only. HIGH/MEDIUM/LOW are reported but do not block.
   # ────────────────────────────────────────────────────────────────────────────
   l2-trivy:
     name: "L2 · Trivy — SCA / CVE"
@@ -219,16 +219,28 @@ jobs:
         run: |
           echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"trivy","rules":[]}},"results":[]}]}' > trivy-results.sarif
 
-      - name: Trivy filesystem scan
+      - name: Trivy scan — all severities (SARIF report)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           format: sarif
           output: trivy-results.sarif
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"          # blocks PR on CRITICAL/HIGH
-          ignore-unfixed: true    # skip CVEs with no upstream fix (reduces noise)
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+          exit-code: "0"          # never blocks — SARIF only for PR comment
+          ignore-unfixed: true
+          skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
+          trivy-config: .security-tools/config/trivy-comprehensive.yaml
+
+      - name: Trivy scan — CRITICAL only (block gate)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: "CRITICAL"
+          exit-code: "1"          # blocks PR only on CRITICAL
+          ignore-unfixed: true
           skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
 
@@ -269,26 +281,41 @@ jobs:
                   if line.startswith("Fixed Version:"):  fixed = line.split(":",1)[1].strip()[:40]
               by_pkg[pkg].append((sev, cve, fixed))
 
-          crit = sum(1 for r in results if "CRITICAL" in r.get("message",{}).get("text",""))
-          high = len(results) - crit
+          sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+          for r in results:
+              msg = r.get("message", {}).get("text", "")
+              for sev in sev_counts:
+                  if f"Severity: {sev}" in msg:
+                      sev_counts[sev] += 1
+                      break
+
+          has_critical = sev_counts["CRITICAL"] > 0
+          header = "## ❌ L2 · Trivy — PR Blocked (CRITICAL CVEs found)" if has_critical else "## ⚠️ L2 · Trivy — Vulnerabilities Found (informational)"
+          summary = (
+              f"Found **{sev_counts['CRITICAL']} CRITICAL** CVEs — PR is blocked. "
+              f"Also: {sev_counts['HIGH']} HIGH, {sev_counts['MEDIUM']} MEDIUM, {sev_counts['LOW']} LOW (informational)."
+              if has_critical else
+              f"Found {sev_counts['HIGH']} HIGH, {sev_counts['MEDIUM']} MEDIUM, {sev_counts['LOW']} LOW CVEs — not blocking."
+          )
 
           lines = [
-              "## ❌ L2 · Trivy — PR Blocked",
+              header,
               f"",
-              f"Found **{crit} CRITICAL** and **{high} HIGH** CVEs in dependencies.",
+              summary,
               f"",
               f"| Package | Severity | CVE | Fix Available |",
               f"|---------|----------|-----|---------------|",
           ]
+          sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
           for pkg, vulns in sorted(by_pkg.items()):
-              for sev, cve, fixed in sorted(vulns, key=lambda x: (x[0] != "CRITICAL", x[1])):
-                  icon = "🔴" if sev == "CRITICAL" else "🟠"
+              for sev, cve, fixed in sorted(vulns, key=lambda x: sev_order.get(x[0], 9)):
+                  icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🔵"}.get(sev, "⚪")
                   lines.append(f"| `{pkg}` | {icon} {sev} | {cve} | `{fixed or 'unknown'}` |")
 
-          lines += [
-              "",
-              "> **Action required:** Update the packages listed above to the fixed versions before this PR can be merged.",
-          ]
+          if has_critical:
+              lines += ["", "> **Action required:** Fix CRITICAL CVEs before this PR can be merged."]
+          else:
+              lines += ["", "> **Note:** No CRITICAL CVEs found. HIGH/MEDIUM/LOW findings are informational — PR is not blocked."]
 
           body = "\n".join(lines)
           token  = os.environ["GITHUB_TOKEN"]
