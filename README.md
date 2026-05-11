@@ -1,27 +1,27 @@
-# security-pipeline
+# organization-security-pipeline
 
-Reusable GitHub Actions security pipeline. Call it from any repo's workflow — it runs four detection layers in sequence on every PR and raises a PR with new Semgrep rules whenever Claude finds a gap.
+Reusable GitHub Actions security pipeline. Wire it into any repo in one step — it runs four detection layers in sequence on every PR, posts inline comments per finding, and auto-generates Semgrep rules whenever Claude finds a gap not covered by existing rules.
 
 ---
 
 ## Layers
 
-| # | Tool | What it catches | Blocks PR? |
-|---|------|----------------|------------|
-| L1 | Gitleaks | Hardcoded secrets, credentials, tokens | Yes — any finding |
-| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL/HIGH |
-| L3 | Semgrep | SAST patterns (custom rules + optional external pack) | Yes — ERROR severity |
-| L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | No — posts inline review comments only |
+| # | Tool | What it catches | Blocks PR? | PR feedback |
+|---|------|----------------|------------|-------------|
+| L1 | Gitleaks | Hardcoded secrets, credentials, tokens | Yes — any finding | Comment: table of leaked files + lines |
+| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL/HIGH | Comment: CVE table with package, severity, fix version |
+| L3 | Semgrep | SAST patterns (custom rules + community/GitLab packs) | Yes — ERROR severity | Comment: SAST findings table |
+| L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | No — advisory only | Inline review comments on exact file + line |
 
-Each layer must pass before the next runs. If L1 finds a secret, L2–L4 never execute.
+**Each layer only runs if the previous passed.** L1 fail → L2/L3/L4 skip. L2 fail → L3/L4 skip.
 
 ---
 
-## How to use it
+## Quick start — wire up a repo
 
-### 1. Add the caller workflow
+### Step 1 — Add the caller workflow
 
-In your repo, create `.github/workflows/security.yml`:
+In the target repo, create `.github/workflows/security.yml`:
 
 ```yaml
 name: Security
@@ -31,27 +31,79 @@ on:
     branches: [main, staging, dev]
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   security:
-    uses: YOUR_ORG/security-pipeline/.github/workflows/security-pipeline.yml@main
+    uses: politechielabs/organization-security-pipeline/.github/workflows/security-pipeline.yml@main
+    secrets: inherit
+```
+
+> `secrets: inherit` passes all repo secrets through automatically. Alternatively pass them explicitly — see the secrets table below.
+
+---
+
+### Step 2 — Create the required secrets
+
+In the target repo: **Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | Required | What to put |
+|--------|----------|-------------|
+| `CLAUDE_API_KEY` | **Yes** | Anthropic API key — get one at [console.anthropic.com](https://console.anthropic.com) |
+| `RULES_REPO_TOKEN` | No | GitHub PAT for pushing gap-fill rules to the rules repo (see Step 4) |
+
+---
+
+### Step 3 — Configure branch protection (recommended)
+
+So that L1/L2/L3 failures actually block merging:
+
+1. Go to **Settings → Branches → Add branch protection rule**
+2. Branch name pattern: `main` (or your default branch)
+3. Enable **Require status checks to pass before merging**
+4. Search for and add these required checks:
+   - `security / L1 · Gitleaks — Secrets`
+   - `security / L2 · Trivy — SCA / CVE`
+   - `security / L3 · Semgrep — SAST`
+5. Enable **Require branches to be up to date before merging**
+6. Save
+
+> L4 (`security / L4 · Claude`) is intentionally excluded — it is advisory only and must never block merging.
+
+---
+
+### Step 4 — (Optional) Point gap rules at a shared rules repo
+
+When Claude finds a CRITICAL/HIGH vulnerability not covered by an existing Semgrep rule, it auto-generates a rule and raises a PR. By default that PR goes into the repo that triggered the workflow. To collect rules centrally across all repos:
+
+1. Create (or designate) a shared rules repo, e.g. `your-org/semgrep-rules`
+2. Generate a GitHub PAT with `contents:write` + `pull-requests:write` scope on that repo
+3. Add it as `RULES_REPO_TOKEN` in every caller repo's secrets
+4. In the caller workflow, set the env variable (or pass as a secret):
+
+```yaml
+jobs:
+  security:
+    uses: politechielabs/organization-security-pipeline/.github/workflows/security-pipeline.yml@main
     secrets:
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-      # Optional — see "Shared rules repo" below
-      SEMGREP_RULES_REPO: ${{ secrets.SEMGREP_RULES_REPO }}
       RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
 ```
 
-Replace `YOUR_ORG/security-pipeline` with wherever this repo lives.
+Gap-fill rule PRs will then land in `your-org/semgrep-rules` under `config/semgrep-custom-rules/custom_rules_<timestamp>.yml`.
 
-### 2. Set the required secret
+---
 
-In your repo → **Settings → Secrets and variables → Actions**:
+### Step 5 — Open a PR and watch it run
 
-| Secret | Required | Value |
-|--------|----------|-------|
-| `CLAUDE_API_KEY` | Yes | Anthropic API key |
-| `SEMGREP_RULES_REPO` | No | `org/rules-repo` — shared Semgrep rules repo |
-| `RULES_REPO_TOKEN` | No | PAT with `contents:write` + `pull-requests:write` on that rules repo |
+Push a branch, open a pull request. The pipeline triggers automatically. You will see:
+
+- **Checks tab** — four status checks appear (`L1 · Gitleaks`, `L2 · Trivy`, `L3 · Semgrep`, `L4 · Claude`)
+- **PR comments** — L1/L2/L3 post a summary comment if they find anything
+- **PR review** — L4 posts inline review comments on the exact line of each finding
+- **New PR** (if Claude found gaps) — a `security/gap-rules-YYYYMMDD-HHMMSS` branch with generated Semgrep rules
 
 ---
 
@@ -61,58 +113,93 @@ In your repo → **Settings → Secrets and variables → Actions**:
 PR opened / updated
       │
       ▼
-L1 · Gitleaks ──── fail → PR blocked (secret found)
-      │ (always continues to L2)
+L1 · Gitleaks ──── fail → PR blocked + comment (leaked file:line table)
+      │ pass only
       ▼
-L2 · Trivy ──────── fail → PR blocked (CVE/misconfig found)
-      │ (always continues to L3)
+L2 · Trivy ──────── fail → PR blocked + comment (CVE table: package / severity / fix version)
+      │ pass only
       ▼
-L3 · Semgrep ────── fail → PR blocked (SAST finding)
-      │ (always continues to L4)
+L3 · Semgrep ────── fail → PR blocked + comment (SAST findings table)
+      │ pass only
       ▼
-L4 · Claude ──────── always runs; posts inline review comments per finding
-      │               never blocks the PR
+L4 · Claude ──────── posts inline review comments per finding (never blocks)
+      │
       ▼
-Generate rules ──── CRITICAL/HIGH gaps → raises a PR with new Semgrep rules
+Rule generation ─── CRITICAL/HIGH gaps → raises PR with new Semgrep rules
 ```
 
-> All 4 layers run on every PR regardless of upstream failures (`if: always()`).
+> L3 and L4 are skipped entirely when L1 or L2 fails — no wasted CI time.
 > Only L1, L2, and L3 can block merging. L4 is advisory only.
 
-L4 uses the GitHub Pull Request Reviews API to post an **inline comment on the exact file and line** for each finding. The review is submitted as `COMMENT` (never `REQUEST_CHANGES`), so the PR is never blocked by L4. CRITICAL/HIGH findings also trigger rule generation in the same job.
+---
+
+## PR feedback per layer
+
+### L1 — secret found
+
+```
+🔴 L1 · Gitleaks — PR Blocked
+
+Found 1 secret(s) hardcoded in the repository.
+
+| Rule                          | File     | Line |
+|-------------------------------|----------|------|
+| hardcoded-password-assignment | config.py | 12  |
+
+Action required: Remove the exposed secret(s), rotate any leaked credentials, and re-push.
+```
+
+### L2 — CVE found
+
+```
+❌ L2 · Trivy — PR Blocked
+
+Found 2 CRITICAL and 16 HIGH CVEs in dependencies.
+
+| Package | Severity  | CVE            | Fix Available |
+|---------|-----------|----------------|---------------|
+| Django  | 🔴 CRITICAL | CVE-2024-42005 | 4.2.15        |
+| Pillow  | 🟠 HIGH    | CVE-2026-25990 | 12.1.1        |
+
+Action required: Update the packages listed above to the fixed versions.
+```
+
+### L3 — SAST finding
+
+```
+❌ L3 · Semgrep — PR Blocked
+
+Found 3 SAST finding(s) in changed files.
+
+| Rule                   | File   | Line | Message                          |
+|------------------------|--------|------|----------------------------------|
+| tainted-sql-string     | api.py | 16   | User input in SQL query          |
+| path-traversal-open    | api.py | 24   | User input in file open()        |
+| os-system-injection    | api.py | 33   | User input in os.system()        |
+
+Action required: Fix the issues above before this PR can be merged.
+```
+
+### L4 — Claude inline review
+
+Claude posts an inline review comment on the exact line with severity, CWE, OWASP category, and a remediation suggestion. For findings in files outside the PR diff (e.g. unchanged files Claude scanned), findings appear in the review body instead.
 
 ---
 
 ## Self-healing rules loop
 
-After L4, the pipeline automatically generates Semgrep rules for any CRITICAL/HIGH finding not already covered by an existing rule (matched by CWE ID). Rules are generated via Claude with extended thinking in batches of 3.
+After L4 runs, the pipeline automatically generates Semgrep rules for any CRITICAL/HIGH finding not already covered by an existing rule (matched by CWE ID). Rules are generated via Claude in batches of 3.
 
-Where the PR lands depends on your config:
-
-| Config | PR destination | Path in that repo |
-|--------|---------------|-------------------|
-| `SEMGREP_RULES_REPO` + `RULES_REPO_TOKEN` set | Your dedicated rules repo | `custom-rules.yml` |
-| Neither set | The repo that triggered the workflow | `.security/semgrep-rules.yml` |
+| Config | PR destination | File path |
+|--------|----------------|-----------|
+| `RULES_REPO_TOKEN` set | Shared rules repo | `config/semgrep-custom-rules/custom_rules_<timestamp>.yml` |
+| Not set | Caller repo | `config/semgrep-custom-rules/custom_rules_<timestamp>.yml` |
 
 Branch name: `security/gap-rules-YYYYMMDD-HHMMSS`
 
-The next time L3 runs, it picks up any merged rules from the rules repo automatically.
+The next time L3 runs, merged rules are picked up automatically.
 
-> **Loop prevention**: PRs from branches starting with `security/` skip L4 entirely, so there is no infinite feedback loop.
-
----
-
-## Shared rules repo (recommended for teams)
-
-If multiple repos call this pipeline, point them all at a single rules repo:
-
-```yaml
-# In every caller repo's secrets:
-SEMGREP_RULES_REPO: myorg/semgrep-rules
-RULES_REPO_TOKEN:   <PAT>
-```
-
-The pipeline clones that repo on every L3 run and appends new rules to `custom-rules.yml` via PR. One repo accumulates rules from all your services.
+> **Loop prevention**: PRs from branches starting with `security/` skip L4 entirely — no infinite feedback loop.
 
 ---
 
@@ -121,11 +208,26 @@ The pipeline clones that repo on every L3 run and appends new rules to `custom-r
 Run the full pipeline locally against any directory:
 
 ```bash
-# Copy .env.example → .env and fill in CLAUDE_API_KEY
-python3 scripts/run_reviewer.py <target_path>
+# 1. Clone this repo
+git clone https://github.com/politechielabs/organization-security-pipeline.git
+cd organization-security-pipeline
 
-# Skip L1–L3 hard gates (useful for testing L4 + rule generation)
-python3 scripts/run_reviewer.py <target_path> --force
+# 2. Create a .env file
+cp .env.example .env
+# Edit .env and set CLAUDE_API_KEY=sk-ant-...
+
+# 3. Install dependencies
+pip install anthropic pyyaml python-dotenv semgrep==1.122.0
+
+# 4. Install tools: gitleaks + trivy (must be on PATH)
+#    macOS:  brew install gitleaks trivy
+#    Linux:  see https://github.com/gitleaks/gitleaks and https://trivy.dev
+
+# 5. Run against a target directory
+python3 scripts/run_reviewer.py /path/to/your/repo
+
+# Skip L1–L3 gates (test L4 + rule generation only)
+python3 scripts/run_reviewer.py /path/to/your/repo --force
 ```
 
 Results are written to `results/raw/claude_code/<target_name>.json`.
@@ -136,28 +238,37 @@ Results are written to `results/raw/claude_code/<target_name>.json`.
 
 ### Gitleaks (`config/gitleaks.toml`)
 
-Six custom rules on top of the Gitleaks default set:
+Custom rules on top of the Gitleaks default set:
 
-- `hardcoded-password-assignment` — `password = "value"` patterns
-- `hardcoded-hmac-secret` — `createHmac("sha256", "literal")`
-- `hardcoded-cookie-secret` — `cookieSecret = "value"`
-- `hardcoded-crypto-key` — `cryptoKey = "value"`
-- `hardcoded-credential-map` — `credMap["user"] = "pass"`
-- `jwt-secret-inline` — `jwt.sign(payload, "literal")`
+| Rule ID | Pattern caught |
+|---------|---------------|
+| `hardcoded-password-assignment` | `password = "value"` |
+| `hardcoded-hmac-secret` | `createHmac("sha256", "literal")` |
+| `hardcoded-cookie-secret` | `cookieSecret = "value"` |
+| `hardcoded-crypto-key` | `cryptoKey = "value"` |
+| `hardcoded-credential-map` | `credMap["user"] = "pass"` |
+| `jwt-secret-inline` | `jwt.sign(payload, "literal")` |
 
 ### Semgrep (`config/semgrep-custom-rules/`)
 
-Custom SAST rules live in `config/semgrep-custom-rules/` as individual numbered YAML files (`custom_rules_1.yml`, `custom_rules_2.yml`, …). Each auto-generated run writes a new file so rule IDs never collide and Semgrep never silently skips duplicates. Also includes the full `config/community/` and `config/gitlab/` rule packs.
+Rules live as individual numbered YAML files (`custom_rules_1.yml`, `custom_rules_2.yml`, …). Each auto-generated run writes a new file — rule IDs never collide and Semgrep never silently skips duplicates.
+
+Also includes the full `config/community/` and `config/gitlab/` rule packs (scanned on L3 in addition to custom rules).
+
+To add your own rules: create `config/semgrep-custom-rules/custom_rules_N.yml` following the existing format.
 
 ---
 
 ## Artifacts
 
-Every run uploads an artifact (retained 14 days):
+Every run uploads these artifacts (retained 14 days):
 
 | Artifact | Contents |
 |----------|----------|
-| `generated-semgrep-rules-<run_id>` | `/tmp/generated_rules.yml` — rules generated this run (also raised as a PR) |
+| `gitleaks-sarif-<run_id>` | Filesystem + git history SARIF from L1 |
+| `trivy-sarif-<run_id>` | Dependency CVE SARIF from L2 |
+| `semgrep-sarif-<run_id>` | SAST findings SARIF from L3 |
+| `generated-semgrep-rules-<run_id>` | New rules generated by L4 (also raised as a PR) |
 
 ---
 
@@ -165,35 +276,51 @@ Every run uploads an artifact (retained 14 days):
 
 ```
 .github/workflows/
-  security-pipeline.yml       # Reusable workflow — call this from other repos
+  security-pipeline.yml         # Reusable workflow — call this from other repos
 
 config/
-  gitleaks.toml               # Custom Gitleaks rules (extends default set)
+  gitleaks.toml                  # Custom Gitleaks rules (extends default set)
+  trivy-comprehensive.yaml       # Trivy scan config
   semgrep-custom-rules/
-    custom_rules_1.yml        # Initial custom Semgrep rule set
-    custom_rules_2.yml        # Auto-generated gap-fill rules (run N)
-    …                         # One new file per generation run
-  community/                  # Semgrep community rule packs
-  gitlab/                     # Semgrep GitLab rule packs
+    custom_rules_1.yml           # Initial custom Semgrep rule set
+    custom_rules_<timestamp>.yml # Auto-generated gap-fill rules (one per L4 run)
+  community/                     # Semgrep community rule packs
+  gitlab/                        # Semgrep GitLab rule packs
 
 scripts/
-  run_reviewer.py             # 4-layer pipeline runner (local + CI entrypoint)
-  analyze_with_agent.py       # Standalone Claude-only analysis script
+  run_reviewer.py                # 4-layer pipeline runner (local + CI entrypoint)
+  analyze_with_agent.py          # Standalone Claude-only analysis script
   prompts/
-    constants.py              # SEMGREP_RULE_SYSTEM prompt for rule generation
+    constants.py                 # SEMGREP_RULE_SYSTEM prompt for rule generation
 ```
 
 ---
 
 ## L4 analysis scope
 
-Claude scans all files in the target directory (CI: full workspace; local: specified path). Limits per run:
+Claude scans all files in the target directory. Per-run limits:
 
-- Max 60 files
-- Max 4 000 chars per file
-- Max 180 000 prompt chars total
-- Skips: `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `.next`, `vendor`, `target`, `bin`, `obj`, `config/`
+| Limit | Value |
+|-------|-------|
+| Max files | 60 |
+| Max chars per file | 4 000 |
+| Max total prompt chars | 180 000 |
+| Min confidence to report | 8 / 10 |
+
+Skipped directories: `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `.next`, `vendor`, `target`, `bin`, `obj`, `config/`
 
 Supported extensions: `.py .js .ts .jsx .tsx .java .kt .kts .go .rb .php .cs .swift .env .yaml .yml .toml .xml .config .cfg .ini .sh .bash .sql`
 
-Claude reports only findings with confidence ≥ 8/10. MEDIUM/LOW findings appear as advisory in the PR comment but do not block the PR.
+MEDIUM/LOW findings appear in the PR review body as advisory but do not block merging.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| L1 detects secrets in old commits | Gitleaks scans PR commits only, but another branch in the repo has a secret commit | Delete the branch with the secret commit; rewrite history if needed |
+| L2 blocks on dependencies you can't update yet | A CVE has no upstream fix yet | Add it to `trivy-comprehensive.yaml` under `vulnerability.ignore-unfixed` |
+| L3 finds 0 issues on Python/JS code | Custom rules are language-specific — check `config/semgrep-custom-rules/` for coverage | Add rules or enable community pack for that language |
+| L4 inline comments don't appear | Findings reference files not changed in this PR | Findings for unchanged files appear in the PR review body instead |
+| Gap rules PR goes to wrong repo | `RULES_REPO_TOKEN` not set or `SEMGREP_RULES_REPO` env not pointing at target repo | Set `RULES_REPO_TOKEN` secret and verify `SEMGREP_RULES_REPO` in the L4 job env |
