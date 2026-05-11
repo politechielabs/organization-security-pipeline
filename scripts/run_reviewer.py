@@ -739,12 +739,8 @@ def create_rules_pr(rules_yaml: str) -> None:
     token       = rules_token or github_token
     timestamp   = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     branch      = f"security/gap-rules-{timestamp}"
-    # Each run writes a new numbered file to avoid duplicate rule IDs across appends
-    rules_file  = (
-        f"custom_rules_{timestamp}.yml"
-        if rules_repo
-        else f"config/semgrep-custom-rules/custom_rules_{timestamp}.yml"
-    )
+    # Always place generated rules under config/semgrep-custom-rules/
+    rules_file = f"config/semgrep-custom-rules/custom_rules_{timestamp}.yml"
 
     if not target_repo:
         print("  [PR] No SEMGREP_RULES_REPO / GITHUB_REPOSITORY configured — rules saved as artifact only")

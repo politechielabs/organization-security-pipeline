@@ -172,7 +172,6 @@ jobs:
     name: "L3 · Semgrep — SAST"
     runs-on: ubuntu-latest
     needs: l2-trivy
-    if: always()  # run even if L2 found CVEs — all layers must execute
 
     steps:
       - name: Checkout target code
@@ -244,7 +243,7 @@ jobs:
     name: "L4 · Claude — Semantic Review + Rule Generation"
     runs-on: ubuntu-latest
     needs: l3-semgrep
-    if: "always() && !startsWith(github.head_ref, 'security/')"  # run even if L3 found issues
+    if: "!startsWith(github.head_ref, 'security/')"
     # continue even if findings are detected — L4 never blocks the PR
     continue-on-error: true
     permissions:
@@ -291,6 +290,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+          SEMGREP_RULES_REPO: politechielabs/organization-security-pipeline
         run: python .security-tools/scripts/run_reviewer.py "$GITHUB_WORKSPACE" --force
 
       - name: Upload generated rules artifact
