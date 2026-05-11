@@ -1,0 +1,175 @@
+# Auto-generated from run #17 — 20260511-093914
+rules:
+- id: custom.gap-timing-attack-password-comparison-py
+  languages:
+  - python
+  message: Direct equality comparison used for a password or secret token. Python's
+    == operator short-circuits on the first differing byte, leaking timing information
+    that allows an attacker to reconstruct the secret one character at a time. Replace
+    == / != with hmac.compare_digest() or secrets.compare_digest() for constant-time
+    comparison (CWE-208).
+  metadata:
+    category: Crypto
+    cwe: CWE-208
+    subcategory: Timing Attack on Password Comparison
+  pattern-either:
+  - patterns:
+    - pattern: $X == $Y
+    - metavariable-regex:
+        metavariable: $X
+        regex: (?i).*(password|passwd|pwd|token|secret|hash|digest|hmac|sig|signature).*
+  - patterns:
+    - pattern: $X != $Y
+    - metavariable-regex:
+        metavariable: $X
+        regex: (?i).*(password|passwd|pwd|token|secret|hash|digest|hmac|sig|signature).*
+  - patterns:
+    - pattern: $X == $Y
+    - metavariable-regex:
+        metavariable: $Y
+        regex: (?i).*(password|passwd|pwd|token|secret|hash|digest|hmac|sig|signature).*
+  - patterns:
+    - pattern: $X != $Y
+    - metavariable-regex:
+        metavariable: $Y
+        regex: (?i).*(password|passwd|pwd|token|secret|hash|digest|hmac|sig|signature).*
+  severity: HIGH
+- id: custom.gap-idor-missing-authorization-profile-update-py
+  languages:
+  - python
+  message: A user-supplied identifier flows directly into a database query without
+    an ownership or authorization check. An attacker can substitute another user's
+    ID to read or modify records they do not own (IDOR). Before executing the query,
+    verify that the authenticated user is the owner of the requested resource, e.g.
+    by comparing the ID against current_user.id and returning 403 on mismatch (CWE-639).
+  metadata:
+    category: Auth
+    cwe: CWE-639
+    subcategory: Missing Authorization on Profile Update (IDOR)
+  mode: taint
+  pattern-sanitizers:
+  - pattern: "if $CURRENT_USER.id == $ID:\n    ...\n"
+  - pattern: abort(403)
+  - pattern: abort(401)
+  - pattern: raise PermissionDenied(...)
+  - pattern: raise Forbidden(...)
+  pattern-sinks:
+  - patterns:
+    - pattern: $MODEL.query.get($SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $MODEL.query.filter_by($KEY=$SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $MODEL.query.filter($EXPR == $SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $MODEL.objects.get($KEY=$SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $MODEL.objects.filter($KEY=$SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $SESSION.query($MODEL).get($SINK)
+    - focus-metavariable: $SINK
+  - patterns:
+    - pattern: $SESSION.get($MODEL, $SINK)
+    - focus-metavariable: $SINK
+  pattern-sources:
+  - pattern: request.args.get(...)
+  - pattern: request.form.get(...)
+  - pattern: request.json.get(...)
+  - pattern: request.view_args.get(...)
+  - pattern: request.data.get(...)
+  - pattern: request.GET.get(...)
+  - pattern: request.POST.get(...)
+  severity: HIGH
+- id: custom.gap-weak-random-password-reset-token-py
+  languages:
+  - python
+  message: The random module uses a Mersenne Twister PRNG that is not cryptographically
+    secure. Tokens generated with random functions can be predicted by an attacker
+    who observes enough outputs, enabling account-takeover via password-reset token
+    forgery. Replace with secrets.token_hex(), secrets.token_urlsafe(), or os.urandom()
+    (CWE-338).
+  metadata:
+    category: Crypto
+    cwe: CWE-338
+    subcategory: Weak/Insecure Random for Password Reset Token
+  pattern-either:
+  - pattern: random.random()
+  - pattern: random.randint(...)
+  - pattern: random.randrange(...)
+  - pattern: random.getrandbits(...)
+  - pattern: random.choice(...)
+  - pattern: random.choices(...)
+  - pattern: random.sample(...)
+  - pattern: random.uniform(...)
+  - patterns:
+    - pattern: $RNG = random.Random(...)
+    - pattern: $RNG.$METHOD(...)
+  severity: HIGH
+- id: custom.gap-coupon-race-condition-toctou-py
+  languages:
+  - python
+  message: A Time-of-Check to Time-of-Use (TOCTOU) race condition was detected in
+    coupon or voucher redemption logic. Fetching a record with the Django ORM (get/filter)
+    and then modifying it in a separate step without a database-level lock allows
+    concurrent requests to pass the validity check simultaneously, enabling double-spending
+    or unlimited coupon reuse. Wrap the fetch and update inside django.db.transaction.atomic
+    and use QuerySet.select_for_update() to acquire a row-level lock before reading
+    the record (CWE-362).
+  metadata:
+    category: Auth
+    cwe: CWE-362
+    subcategory: Coupon Race Condition (TOCTOU)
+  mode: taint
+  pattern-sanitizers:
+  - pattern: $MODEL.objects.select_for_update(...)
+  - pattern: transaction.atomic(...)
+  pattern-sinks:
+  - patterns:
+    - pattern: $OBJ.save(...)
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.delete(...)
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.is_used = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.used = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.redeemed = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.is_redeemed = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.usage_count = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.times_used = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $OBJ.is_active = $VAL
+    - focus-metavariable: $OBJ
+  - patterns:
+    - pattern: $MODEL.objects.filter(...).update(...)
+    - focus-metavariable: $MODEL
+  pattern-sources:
+  - patterns:
+    - pattern: $MODEL.objects.get(...)
+    - pattern-not: $MODEL.objects.select_for_update(...).get(...)
+  - patterns:
+    - pattern: $MODEL.objects.filter(...).first()
+    - pattern-not: $MODEL.objects.select_for_update(...).filter(...).first()
+  - patterns:
+    - pattern: $MODEL.objects.filter(...)
+    - pattern-not: $MODEL.objects.select_for_update(...).filter(...)
+  - patterns:
+    - pattern: $MODEL.objects.get_or_create(...)
+    - pattern-not: $MODEL.objects.select_for_update(...).get_or_create(...)
+  severity: HIGH
+
