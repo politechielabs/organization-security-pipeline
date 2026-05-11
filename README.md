@@ -111,7 +111,7 @@ So that L1/L2/L3 failures actually block merging:
 
 ---
 
-### Step 4 — (Optional) Point gap rules at a shared rules repo
+### Step 4 — Point gap rules at a shared rules repo
 
 When Claude finds a CRITICAL/HIGH vulnerability not covered by an existing Semgrep rule, it auto-generates a rule and raises a PR. By default that PR goes into the repo that triggered the workflow. To collect rules centrally across all repos:
 
