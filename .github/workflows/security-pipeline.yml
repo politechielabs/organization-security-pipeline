@@ -59,11 +59,14 @@ jobs:
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
 
-      - name: Initialize SARIF stubs (ensure upload never fails on missing file)
+      - name: Initialize SARIF stubs and gitleaks ignore
         run: |
           EMPTY_SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gitleaks","rules":[]}},"results":[]}]}'
           echo "$EMPTY_SARIF" > gitleaks-fs.sarif
           echo "$EMPTY_SARIF" > gitleaks-git.sarif
+          # Exclude the checked-out security tools from scans
+          # gitleaks v8 uses .gitleaksignore — --exclude-path flag does not exist
+          echo '.security-tools/' >> .gitleaksignore
 
       - name: Scan filesystem for secrets
         # --no-git scans working tree only, not history
@@ -72,10 +75,9 @@ jobs:
             --config .security-tools/config/gitleaks.toml \
             --source . \
             --no-git \
-            --exclude-path .security-tools \
             --exit-code 1 \
-            --report-format sarif \
-            --report-path gitleaks-fs.sarif
+            -f sarif \
+            -r gitleaks-fs.sarif
         continue-on-error: true   # collect both reports before failing
 
       - name: Scan git history for secrets
@@ -83,15 +85,15 @@ jobs:
           gitleaks detect \
             --config .security-tools/config/gitleaks.toml \
             --source . \
-            --exclude-path .security-tools \
             --exit-code 1 \
-            --report-format sarif \
-            --report-path gitleaks-git.sarif
+            -f sarif \
+            -r gitleaks-git.sarif
         continue-on-error: true   # collect both reports before failing
 
       - name: Upload filesystem SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true   # requires GitHub Advanced Security on private repos
         with:
           sarif_file: gitleaks-fs.sarif
           category: gitleaks-fs
@@ -99,9 +101,20 @@ jobs:
       - name: Upload git-history SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true   # requires GitHub Advanced Security on private repos
         with:
           sarif_file: gitleaks-git.sarif
           category: gitleaks-git
+
+      - name: Upload gitleaks SARIF as artifact (fallback for non-GHAS repos)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-sarif-${{ github.run_id }}
+          path: |
+            gitleaks-fs.sarif
+            gitleaks-git.sarif
+          retention-days: 14
 
       - name: Fail if secrets found
         # Re-check exit codes from both scans so the job fails correctly
@@ -162,10 +175,19 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()   # upload even when exit-code:1 fires so findings appear in Security tab
+        if: always()
+        continue-on-error: true   # requires GitHub Advanced Security on private repos
         with:
           sarif_file: trivy-results.sarif
           category: trivy
+
+      - name: Upload Trivy SARIF as artifact (fallback for non-GHAS repos)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-sarif-${{ github.run_id }}
+          path: trivy-results.sarif
+          retention-days: 14
 
   # ────────────────────────────────────────────────────────────────────────────
   # L3 · Semgrep — SAST (diff-aware)
@@ -230,9 +252,18 @@ jobs:
       - name: Upload Semgrep SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true   # requires GitHub Advanced Security on private repos
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
+
+      - name: Upload Semgrep SARIF as artifact (fallback for non-GHAS repos)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif-${{ github.run_id }}
+          path: semgrep-results.sarif
+          retention-days: 14
 
   # ────────────────────────────────────────────────────────────────────────────
   # L4 · Claude — Semantic Triage + Semgrep Rule Generation
