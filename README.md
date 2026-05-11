@@ -62,19 +62,22 @@ PR opened / updated
       │
       ▼
 L1 · Gitleaks ──── fail → PR blocked (secret found)
-      │ pass
+      │ (always continues to L2)
       ▼
-L2 · Trivy ──────── fail → PR blocked (CVE/misconfig)
-      │ pass
+L2 · Trivy ──────── fail → PR blocked (CVE/misconfig found)
+      │ (always continues to L3)
       ▼
 L3 · Semgrep ────── fail → PR blocked (SAST finding)
-      │ pass
+      │ (always continues to L4)
       ▼
 L4 · Claude ──────── always runs; posts inline review comments per finding
       │               never blocks the PR
       ▼
 Generate rules ──── CRITICAL/HIGH gaps → raises a PR with new Semgrep rules
 ```
+
+> All 4 layers run on every PR regardless of upstream failures (`if: always()`).
+> Only L1, L2, and L3 can block merging. L4 is advisory only.
 
 L4 uses the GitHub Pull Request Reviews API to post an **inline comment on the exact file and line** for each finding. The review is submitted as `COMMENT` (never `REQUEST_CHANGES`), so the PR is never blocked by L4. CRITICAL/HIGH findings also trigger rule generation in the same job.
 
