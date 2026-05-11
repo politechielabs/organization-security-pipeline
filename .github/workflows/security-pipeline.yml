@@ -12,7 +12,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  security-events: write
 
 concurrency:
   group: security-${{ github.ref }}
@@ -35,7 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
       pull-requests: write
 
     steps:
@@ -52,11 +50,12 @@ jobs:
           path: .security-tools
           token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Install Gitleaks binary (no license needed)
+      - name: Install Gitleaks binary
         run: |
           wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
           tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
-          sudo mv gitleaks /usr/local/bin/
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
       - name: Initialize SARIF stubs and gitleaks ignore
@@ -90,23 +89,7 @@ jobs:
             -r gitleaks-git.sarif
         continue-on-error: true   # collect both reports before failing
 
-      - name: Upload filesystem SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true   # requires GitHub Advanced Security on private repos
-        with:
-          sarif_file: gitleaks-fs.sarif
-          category: gitleaks-fs
-
-      - name: Upload git-history SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true   # requires GitHub Advanced Security on private repos
-        with:
-          sarif_file: gitleaks-git.sarif
-          category: gitleaks-git
-
-      - name: Upload gitleaks SARIF as artifact (fallback for non-GHAS repos)
+      - name: Upload gitleaks SARIF as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -141,8 +124,7 @@ jobs:
     needs: l1-gitleaks
     permissions:
       contents: read
-      security-events: write   # upload SARIF to GitHub Security tab
-      pull-requests: write     # post PR annotations
+      pull-requests: write
 
     steps:
       - name: Checkout target code
@@ -173,15 +155,7 @@ jobs:
           skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
 
-      - name: Upload Trivy SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true   # requires GitHub Advanced Security on private repos
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy
-
-      - name: Upload Trivy SARIF as artifact (fallback for non-GHAS repos)
+      - name: Upload Trivy SARIF as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -249,15 +223,7 @@ jobs:
             --sarif --output semgrep-results.sarif \
             "${TARGET_FILES[@]}"
 
-      - name: Upload Semgrep SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        continue-on-error: true   # requires GitHub Advanced Security on private repos
-        with:
-          sarif_file: semgrep-results.sarif
-          category: semgrep
-
-      - name: Upload Semgrep SARIF as artifact (fallback for non-GHAS repos)
+      - name: Upload Semgrep SARIF as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
