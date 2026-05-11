@@ -163,6 +163,74 @@ jobs:
           path: trivy-results.sarif
           retention-days: 14
 
+      - name: Comment CVE findings on PR
+        if: always() && github.event.pull_request.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+
+          sarif = json.load(open("trivy-results.sarif"))
+          results = sarif["runs"][0]["results"]
+
+          if not results:
+              print("No findings — skipping comment")
+              exit(0)
+
+          from collections import defaultdict
+          by_pkg = defaultdict(list)
+          for r in results:
+              msg = r.get("message", {}).get("text", "")
+              pkg = sev = cve = fixed = ""
+              for line in msg.splitlines():
+                  if line.startswith("Package:"):        pkg   = line.split(":",1)[1].strip()
+                  if line.startswith("Severity:"):       sev   = line.split(":",1)[1].strip()
+                  if line.startswith("Vulnerability"):   cve   = line.split(None,1)[1].strip() if " " in line else ""
+                  if line.startswith("Fixed Version:"):  fixed = line.split(":",1)[1].strip()[:40]
+              by_pkg[pkg].append((sev, cve, fixed))
+
+          crit = sum(1 for r in results if "CRITICAL" in r.get("message",{}).get("text",""))
+          high = len(results) - crit
+
+          lines = [
+              "## ❌ L2 · Trivy — PR Blocked",
+              f"",
+              f"Found **{crit} CRITICAL** and **{high} HIGH** CVEs in dependencies.",
+              f"",
+              f"| Package | Severity | CVE | Fix Available |",
+              f"|---------|----------|-----|---------------|",
+          ]
+          for pkg, vulns in sorted(by_pkg.items()):
+              for sev, cve, fixed in sorted(vulns, key=lambda x: (x[0] != "CRITICAL", x[1])):
+                  icon = "🔴" if sev == "CRITICAL" else "🟠"
+                  lines.append(f"| `{pkg}` | {icon} {sev} | {cve} | `{fixed or 'unknown'}` |")
+
+          lines += [
+              "",
+              "> **Action required:** Update the packages listed above to the fixed versions before this PR can be merged.",
+          ]
+
+          body = "\n".join(lines)
+          token  = os.environ["GITHUB_TOKEN"]
+          repo   = os.environ["REPO"]
+          pr_num = os.environ["PR_NUMBER"]
+          url    = f"https://api.github.com/repos/{repo}/issues/{pr_num}/comments"
+          data   = json.dumps({"body": body}).encode()
+          req    = urllib.request.Request(url, data=data, headers={
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json",
+          })
+          try:
+              urllib.request.urlopen(req)
+              print(f"  ✅ CVE summary posted to PR #{pr_num}")
+          except urllib.error.HTTPError as e:
+              print(f"  ⚠️  Could not post comment: {e.code} {e.read().decode()}")
+          EOF
+
   # ────────────────────────────────────────────────────────────────────────────
   # L3 · Semgrep — SAST (diff-aware)
   # Scans only changed source files. Blocks on ERROR-severity findings.
