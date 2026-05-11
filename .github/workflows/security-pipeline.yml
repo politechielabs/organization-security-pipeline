@@ -220,7 +220,7 @@ jobs:
 
           semgrep $CONFIG_FLAGS \
             --severity ERROR \
-            --exit-code 1 \
+            --error \
             --sarif --output semgrep-results.sarif \
             "${TARGET_FILES[@]}"
 
@@ -272,6 +272,13 @@ jobs:
 
       - name: Install dependencies
         run: pip install anthropic pyyaml python-dotenv
+
+      - name: Install Gitleaks (required by run_reviewer.py L1)
+        run: |
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
 
       - name: Claude semantic analysis + inline review + rule generation
         env:
