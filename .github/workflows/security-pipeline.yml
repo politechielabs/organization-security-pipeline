@@ -271,7 +271,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install anthropic pyyaml python-dotenv
+        run: pip install anthropic pyyaml python-dotenv semgrep==1.122.0
 
       - name: Install security tools (gitleaks + trivy, required by run_reviewer.py)
         run: |
