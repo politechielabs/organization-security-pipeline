@@ -311,7 +311,8 @@ jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # L3 · Semgrep — SAST (diff-aware)
   # Scans only changed source files. Blocks on ERROR-severity findings.
-  # Rules live in .security-tools/config/semgrep-custom-rules (same repo).
+  # Rules: custom rules in .security-tools/config/semgrep-custom-rules + Semgrep Registry packs
+  # (p/python, p/javascript, p/typescript, p/java, p/kotlin, p/secrets) downloaded at runtime.
   # ────────────────────────────────────────────────────────────────────────────
   l3-semgrep:
     name: "L3 · Semgrep — SAST"
@@ -358,7 +359,13 @@ jobs:
             exit 0
           fi
 
-          CONFIG_FLAGS="--config .security-tools/config/semgrep-custom-rules"
+          CONFIG_FLAGS="--config .security-tools/config/semgrep-custom-rules \
+            --config p/python \
+            --config p/javascript \
+            --config p/typescript \
+            --config p/java \
+            --config p/kotlin \
+            --config p/secrets"
 
           mapfile -t TARGET_FILES < /tmp/semgrep_targets.txt
 
