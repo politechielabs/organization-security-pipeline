@@ -737,6 +737,8 @@ def create_rules_pr(rules_yaml: str) -> None:
 
     target_repo = rules_repo or caller_repo
     token       = rules_token or github_token
+    timestamp   = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    branch      = f"security/gap-rules-{timestamp}"
     # Each run writes a new numbered file to avoid duplicate rule IDs across appends
     rules_file  = (
         f"custom_rules_{timestamp}.yml"
@@ -754,9 +756,6 @@ def create_rules_pr(rules_yaml: str) -> None:
     else:
         clone_url = f"git@github.com:{target_repo}"
         print("  [PR] No token set — using SSH clone (gh CLI auth)")
-
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    branch    = f"security/gap-rules-{timestamp}"
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
