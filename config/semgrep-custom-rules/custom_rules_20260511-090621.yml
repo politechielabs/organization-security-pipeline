@@ -1,0 +1,270 @@
+# Auto-generated from run #15 — 20260511-090621
+rules:
+  - id: custom.gap-sql-injection-string-concat-py
+    languages: [python]
+    severity: CRITICAL
+    message: >-
+      User-controlled input is concatenated directly into a SQL query string. An attacker
+      can manipulate the query to read, modify, or delete arbitrary data. Use parameterized
+      queries or an ORM with bound parameters instead of string formatting or concatenation
+      (CWE-89).
+    metadata:
+      cwe: CWE-89
+      category: Injection
+      subcategory: SQL Injection via String Concatenation
+    mode: taint
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: |-
+          request.args[$KEY]
+      - pattern: request.form.get(...)
+      - pattern: |-
+          request.form[$KEY]
+      - pattern: request.json.get(...)
+      - pattern: |-
+          request.json[$KEY]
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.GET.get(...)
+      - pattern: |-
+          request.GET[$KEY]
+      - pattern: request.POST.get(...)
+      - pattern: |-
+          request.POST[$KEY]
+    pattern-sinks:
+      - patterns:
+          - pattern: $CURSOR.execute($QUERY, ...)
+          - focus-metavariable: $QUERY
+      - patterns:
+          - pattern: $CURSOR.executemany($QUERY, ...)
+          - focus-metavariable: $QUERY
+      - patterns:
+          - pattern: $DB.execute($QUERY, ...)
+          - focus-metavariable: $QUERY
+      - patterns:
+          - pattern: $SESSION.execute($QUERY, ...)
+          - focus-metavariable: $QUERY
+      - patterns:
+          - pattern: $CONN.execute($QUERY, ...)
+          - focus-metavariable: $QUERY
+    pattern-sanitizers:
+      - pattern: $DB.escape(...)
+      - pattern: $CONN.escape_string(...)
+      - pattern: sqlalchemy.text(...)
+
+
+  - id: custom.gap-weak-hash-md5-password-py
+    languages: [python]
+    severity: HIGH
+    message: >-
+      MD5 is a cryptographically broken hash function and must not be used for password
+      hashing. Its speed and known collision vulnerabilities allow offline brute-force and
+      rainbow-table attacks. Replace with a memory-hard password hashing function such as
+      bcrypt, scrypt, or argon2 (CWE-328).
+    metadata:
+      cwe: CWE-328
+      category: Crypto
+      subcategory: Use of Weak Hash Algorithm (MD5) for Password Hashing
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.new("md5", ...)
+      - pattern: |-
+          hashlib.new('md5', ...)
+      - pattern: hashlib.new("MD5", ...)
+      - pattern: |-
+          hashlib.new('MD5', ...)
+      - patterns:
+          - pattern: $H = hashlib.new($ALG, ...)
+          - pattern-where-python: 'vars["$ALG"].lower() == "md5"'
+      - pattern: Crypto.Hash.MD5.new(...)
+      - pattern: Cryptodome.Hash.MD5.new(...)
+      - pattern: passlib.hash.md5_crypt.hash(...)
+      - pattern: passlib.hash.md5_crypt.encrypt(...)
+
+
+  - id: custom.gap-mass-assignment-discount-field-py
+    languages: [python]
+    severity: HIGH
+    message: >-
+      User-controlled request data flows directly into a sensitive model field (e.g.
+      discount, price, role) without field-level filtering. An attacker can supply
+      arbitrary field values to manipulate business logic or privilege levels. Explicitly
+      whitelist the fields accepted from user input instead of passing raw request
+      payloads to model constructors or update methods (CWE-915).
+    metadata:
+      cwe: CWE-915
+      category: Auth
+      subcategory: Mass Assignment — User-Controlled Discount Field
+    mode: taint
+    pattern-sources:
+      - pattern: request.json
+      - pattern: request.json.get(...)
+      - pattern: |-
+          request.json[$KEY]
+      - pattern: request.form
+      - pattern: request.form.get(...)
+      - pattern: |-
+          request.form[$KEY]
+      - pattern: request.args
+      - pattern: request.args.get(...)
+      - pattern: |-
+          request.args[$KEY]
+      - pattern: request.data
+      - pattern: request.GET
+      - pattern: request.GET.get(...)
+      - pattern: request.POST
+      - pattern: request.POST.get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $OBJ.discount = $VAL
+          - focus-metavariable: $VAL
+      - patterns:
+          - pattern: setattr($OBJ, "discount", $VAL)
+          - focus-metavariable: $VAL
+      - patterns:
+          - pattern: |-
+              setattr($OBJ, 'discount', $VAL)
+          - focus-metavariable: $VAL
+      - patterns:
+          - pattern: $MODEL(**$DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: $OBJ.__dict__.update($DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: $OBJ.update($DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: $SERIALIZER.save(**$DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: $SERIALIZER = $SER(data=$DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: custom.gap-predictable-password-reset-token-md5-py
+    languages: [python]
+    severity: HIGH
+    message: >-
+      A password-reset token is derived by hashing a timestamp with MD5. Timestamps are
+      trivially guessable, and MD5 is not a suitable CSPRNG substitute. An attacker can
+      enumerate candidate tokens within a narrow time window and take over any account.
+      Use secrets.token_urlsafe() or os.urandom() for cryptographically strong tokens
+      (CWE-340).
+    metadata:
+      cwe: CWE-340
+      category: Crypto
+      subcategory: Predictable Password Reset Token (Timestamp-Based MD5)
+    mode: taint
+    pattern-sources:
+      - pattern: time.time()
+      - pattern: time.time_ns()
+      - pattern: time.monotonic()
+      - pattern: datetime.datetime.now()
+      - pattern: datetime.datetime.utcnow()
+      - pattern: datetime.datetime.today()
+      - pattern: datetime.now()
+      - pattern: datetime.utcnow()
+    pattern-sinks:
+      - patterns:
+          - pattern: hashlib.md5($DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: hashlib.md5($DATA, ...)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: hashlib.new("md5", $DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: hashlib.new("md5", $DATA, ...)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: md5($DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: md5($DATA).hexdigest()
+          - focus-metavariable: $DATA
+
+
+  - id: custom.gap-missing-authz-delete-account-py
+    languages: [python]
+    severity: CRITICAL
+    message: >-
+      The delete_account handler appears to lack an authorization decorator or explicit
+      identity verification. Any authenticated (or unauthenticated) caller may be able to
+      delete an arbitrary account. Enforce ownership checks with @login_required plus an
+      explicit user-ID comparison, or use a permission framework decorator before allowing
+      destructive operations (CWE-862).
+    metadata:
+      cwe: CWE-862
+      category: Auth
+      subcategory: Missing Authorization in delete_account
+    patterns:
+      - pattern: |
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @login_required
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @requires_auth
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @auth_required
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @jwt_required
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @jwt_required(...)
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @permission_required(...)
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @require_permissions(...)
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          @token_required
+          def delete_account(...):
+              ...
+      - pattern-not: |
+          def delete_account(...):
+              ...
+              current_user
+              ...
+      - pattern-not: |
+          def delete_account(...):
+              ...
+              request.user
+              ...
+
+
+  - id: custom.gap-overly-permissive-gha-contents-write
+    languages: [generic]
+    severity: HIGH
+    message: >-
+      This GitHub Actions workflow grants contents:write permission at the job or workflow
+      level. This allows any step in the workflow — including compromised third-party
+      actions — to push commits, create releases, or overwrite refs in the repository.
+      Scope permissions to the minimum required (e.g., contents:read) and elevate only
+      in the specific job step that requires write access (CWE-732).
+    metadata:
+      cwe: CWE-732
+      category: Injection
+      subcategory: Overly Permissive GitHub Actions Permissions (contents: write)
+    paths:
+      include:
+        - .github/workflows/*.yml
+        - .github/workflows/*.yaml
+    pattern: |
+      permissions:
+        ...
+        contents: write
+
