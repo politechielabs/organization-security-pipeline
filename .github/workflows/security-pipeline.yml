@@ -59,6 +59,12 @@ jobs:
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
 
+      - name: Initialize SARIF stubs (ensure upload never fails on missing file)
+        run: |
+          EMPTY_SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gitleaks","rules":[]}},"results":[]}]}'
+          echo "$EMPTY_SARIF" > gitleaks-fs.sarif
+          echo "$EMPTY_SARIF" > gitleaks-git.sarif
+
       - name: Scan filesystem for secrets
         # --no-git scans working tree only, not history
         run: |
@@ -84,14 +90,14 @@ jobs:
         continue-on-error: true   # collect both reports before failing
 
       - name: Upload filesystem SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: gitleaks-fs.sarif
           category: gitleaks-fs
 
       - name: Upload git-history SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: gitleaks-git.sarif
@@ -137,6 +143,10 @@ jobs:
           path: .security-tools
           token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
+      - name: Initialize Trivy SARIF stub
+        run: |
+          echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"trivy","rules":[]}},"results":[]}]}' > trivy-results.sarif
+
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.30.0
         with:
@@ -151,7 +161,7 @@ jobs:
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
 
       - name: Upload Trivy SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()   # upload even when exit-code:1 fires so findings appear in Security tab
         with:
           sarif_file: trivy-results.sarif
@@ -218,7 +228,7 @@ jobs:
             "${TARGET_FILES[@]}"
 
       - name: Upload Semgrep SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-results.sarif
