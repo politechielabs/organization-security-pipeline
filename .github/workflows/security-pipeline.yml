@@ -48,7 +48,6 @@ jobs:
           repository: politechielabs/organization-security-pipeline
           ref: main
           path: .security-tools
-          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install Gitleaks binary
         run: |
@@ -213,7 +212,6 @@ jobs:
           repository: politechielabs/organization-security-pipeline
           ref: main
           path: .security-tools
-          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Initialize Trivy SARIF stub
         run: |
@@ -358,7 +356,6 @@ jobs:
           repository: politechielabs/organization-security-pipeline
           ref: main
           path: .security-tools
-          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Fetch base branch
         run: |
@@ -500,7 +497,6 @@ jobs:
           repository: politechielabs/organization-security-pipeline
           ref: main
           path: .security-tools
-          token: ${{ secrets.RULES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
