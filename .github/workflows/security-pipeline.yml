@@ -217,14 +217,14 @@ jobs:
         run: |
           echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"trivy","rules":[]}},"results":[]}]}' > trivy-results.sarif
 
-      - name: Trivy scan — all severities (SARIF report)
+      - name: Trivy scan — CRITICAL only (SARIF report)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           format: sarif
           output: trivy-results.sarif
-          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+          severity: "CRITICAL"
           exit-code: "0"          # never blocks — SARIF only for PR comment
           ignore-unfixed: true
           skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
@@ -263,57 +263,40 @@ jobs:
           sarif = json.load(open("trivy-results.sarif"))
           results = sarif["runs"][0]["results"]
 
-          if not results:
-              print("No findings — skipping comment")
+          # Only report CRITICAL — skip comment entirely if none
+          critical = []
+          for r in results:
+              msg = r.get("message", {}).get("text", "")
+              if "Severity: CRITICAL" in msg:
+                  critical.append(msg)
+
+          if not critical:
+              print("No CRITICAL findings — skipping comment")
               exit(0)
 
           from collections import defaultdict
           by_pkg = defaultdict(list)
-          for r in results:
-              msg = r.get("message", {}).get("text", "")
-              pkg = sev = cve = fixed = ""
+          for msg in critical:
+              pkg = cve = fixed = ""
               for line in msg.splitlines():
-                  if line.startswith("Package:"):        pkg   = line.split(":",1)[1].strip()
-                  if line.startswith("Severity:"):       sev   = line.split(":",1)[1].strip()
-                  if line.startswith("Vulnerability"):   cve   = line.split(None,1)[1].strip() if " " in line else ""
-                  if line.startswith("Fixed Version:"):  fixed = line.split(":",1)[1].strip()[:40]
-              by_pkg[pkg].append((sev, cve, fixed))
-
-          sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-          for r in results:
-              msg = r.get("message", {}).get("text", "")
-              for sev in sev_counts:
-                  if f"Severity: {sev}" in msg:
-                      sev_counts[sev] += 1
-                      break
-
-          has_critical = sev_counts["CRITICAL"] > 0
-          header = "## ❌ L2 · Trivy — PR Blocked (CRITICAL CVEs found)" if has_critical else "## ⚠️ L2 · Trivy — Vulnerabilities Found (informational)"
-          summary = (
-              f"Found **{sev_counts['CRITICAL']} CRITICAL** CVEs — PR is blocked. "
-              f"Also: {sev_counts['HIGH']} HIGH, {sev_counts['MEDIUM']} MEDIUM, {sev_counts['LOW']} LOW (informational)."
-              if has_critical else
-              f"Found {sev_counts['HIGH']} HIGH, {sev_counts['MEDIUM']} MEDIUM, {sev_counts['LOW']} LOW CVEs — not blocking."
-          )
+                  if line.startswith("Package:"):       pkg   = line.split(":",1)[1].strip()
+                  if line.startswith("Vulnerability"):  cve   = line.split(None,1)[1].strip() if " " in line else ""
+                  if line.startswith("Fixed Version:"): fixed = line.split(":",1)[1].strip()[:40]
+              by_pkg[pkg].append((cve, fixed))
 
           lines = [
-              header,
-              f"",
-              summary,
-              f"",
-              f"| Package | Severity | CVE | Fix Available |",
-              f"|---------|----------|-----|---------------|",
+              "## ❌ L2 · Trivy — PR Blocked (CRITICAL CVEs found)",
+              "",
+              f"Found **{len(critical)} CRITICAL** CVE(s) — PR is blocked until resolved.",
+              "",
+              "| Package | CVE | Fix Available |",
+              "|---------|-----|---------------|",
           ]
-          sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
           for pkg, vulns in sorted(by_pkg.items()):
-              for sev, cve, fixed in sorted(vulns, key=lambda x: sev_order.get(x[0], 9)):
-                  icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🔵"}.get(sev, "⚪")
-                  lines.append(f"| `{pkg}` | {icon} {sev} | {cve} | `{fixed or 'unknown'}` |")
+              for cve, fixed in vulns:
+                  lines.append(f"| `{pkg}` | {cve} | `{fixed or 'unknown'}` |")
 
-          if has_critical:
-              lines += ["", "> **Action required:** Fix CRITICAL CVEs before this PR can be merged."]
-          else:
-              lines += ["", "> **Note:** No CRITICAL CVEs found. HIGH/MEDIUM/LOW findings are informational — PR is not blocked."]
+          lines += ["", "> **Action required:** Fix CRITICAL CVEs before this PR can be merged."]
 
           body = "\n".join(lines)
           token  = os.environ["GITHUB_TOKEN"]
