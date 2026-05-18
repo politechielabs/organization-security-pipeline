@@ -8,10 +8,10 @@ scan:
     - misconfig  # IaC misconfigurations (Dockerfile, Terraform, k8s YAML)
     - secret     # hardcoded credentials (backup to L1 Gitleaks)
 
-# ── Severity filter ───────────────────────────────────────────────────────────
-severity:
-  - CRITICAL
-  - HIGH
+# Severity filter is intentionally omitted here.
+# Each workflow step controls severity via --severity flag:
+#   - SARIF report step: CRITICAL,HIGH,MEDIUM,LOW (informational)
+#   - Block-gate step:   CRITICAL only (blocks PR)
 
 # ── Vulnerability options ─────────────────────────────────────────────────────
 vulnerability:
