@@ -9,7 +9,7 @@ Reusable GitHub Actions security pipeline. Wire it into any repo in one step —
 | # | Tool | What it catches | Blocks PR? | PR feedback |
 |---|------|----------------|------------|-------------|
 | L1 | Gitleaks | Hardcoded secrets, credentials, tokens | Yes — any finding | Comment: table of leaked files + lines |
-| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL only | Comment: CVE table with package, severity, fix version (HIGH/MEDIUM/LOW informational) |
+| L2 | Trivy | CVEs in dependencies, IaC misconfigs | Yes — CRITICAL only | Comment: CVE table with package and fix version (CRITICAL only) |
 | L3 | Semgrep | SAST patterns (custom rules + community/GitLab packs) | Yes — ERROR severity | Comment: SAST findings table |
 | L4 | Claude `claude-sonnet-4-6` | Logic flaws, auth bypasses, taint flows rules miss | No — advisory only | Inline review comments on exact file + line |
 
@@ -42,18 +42,24 @@ name: Security
 
 on:
   pull_request:
-    branches: [prod]                          # change to your prod branch 
+    branches: [prod]          # production branch — adjust if yours is named differently
     types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
 
 jobs:
   security:
+    if: github.repository_owner == 'politechielabs'
     uses: politechielabs/organization-security-pipeline/.github/workflows/security-pipeline.yml@main
-    secrets: inherit
+    secrets:
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
 ```
+
+> The `if: github.repository_owner == 'politechielabs'` guard prevents this workflow from running if the repo is forked or moved outside the organization. Remove or update it if your org name differs.
 
 Commit and push this file to your default branch (not a feature branch — it must be on `main`/`master` for GitHub Actions to pick it up).
 
@@ -181,7 +187,7 @@ L3 · Semgrep ────── fail → PR blocked + comment (SAST findings ta
 L4 · Claude ──────── posts inline review comments per finding (never blocks)
       │
       ▼
-Rule generation ─── CRITICAL/HIGH gaps → raises PR with new Semgrep rules
+Rule generation ─── CRITICAL gaps → raises PR with new Semgrep rules
 ```
 
 > L3 and L4 are skipped entirely when L1 or L2 fails — no wasted CI time.
@@ -208,16 +214,15 @@ Action required: Remove the exposed secret(s), rotate any leaked credentials, an
 ### L2 — CVE found
 
 ```
-❌ L2 · Trivy — PR Blocked
+❌ L2 · Trivy — PR Blocked (CRITICAL CVEs found)
 
-Found 2 CRITICAL and 16 HIGH CVEs in dependencies.
+Found 1 CRITICAL CVE(s) — PR is blocked until resolved.
 
-| Package | Severity  | CVE            | Fix Available |
-|---------|-----------|----------------|---------------|
-| Django  | 🔴 CRITICAL | CVE-2024-42005 | 4.2.15        |
-| Pillow  | 🟠 HIGH    | CVE-2026-25990 | 12.1.1        |
+| Package | CVE            | Fix Available |
+|---------|----------------|---------------|
+| Django  | CVE-2024-42005 | 4.2.15        |
 
-Action required: Update the packages listed above to the fixed versions.
+Action required: Fix CRITICAL CVEs before this PR can be merged.
 ```
 
 ### L3 — SAST finding
@@ -267,12 +272,12 @@ Key flags:
 
 | Flag | Value | Effect |
 |------|-------|--------|
-| `severity` | `CRITICAL,HIGH` | Only report CVEs at these levels — LOW/MEDIUM are skipped |
+| `severity` | `CRITICAL` | Only report CRITICAL CVEs — HIGH/MEDIUM/LOW are skipped |
 | `ignore-unfixed` | `true` | Suppress CVEs that have no upstream fix yet (reduces noise) |
 | `exit-code` | `1` | Non-zero exit on any finding → blocks the PR job |
 | `skip-dirs` | `config/community,config/gitlab,.git,node_modules,vendor,.venv` | Excludes rule packs and vendored code |
 
-The SARIF output is parsed by an inline Python script that groups findings by package, adds severity icons (🔴 CRITICAL / 🟠 HIGH), and posts a single PR comment table with the CVE ID and the fixed version to upgrade to.
+The SARIF output is parsed by an inline Python script that groups findings by package and posts a single PR comment table with the CVE ID and the fixed version to upgrade to.
 
 ---
 
@@ -314,7 +319,7 @@ semgrep --config .security-tools/config/semgrep-custom-rules \
 
 ---
 
-After L4 runs, the pipeline automatically generates Semgrep rules for any CRITICAL/HIGH finding not already covered by an existing rule (matched by CWE ID). Rules are generated via Claude in batches of 3.
+After L4 runs, the pipeline automatically generates Semgrep rules for any CRITICAL finding not already covered by an existing rule (matched by CWE ID). Rules are generated via Claude in batches of 3.
 
 | Config | PR destination | File path |
 |--------|----------------|-----------|

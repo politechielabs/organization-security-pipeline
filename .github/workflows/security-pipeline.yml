@@ -190,10 +190,6 @@ jobs:
           fi
           echo "✅ No secrets found"
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # L2 · Trivy — SCA / CVE / Misconfigs
-  # Blocks on CRITICAL vulnerabilities only. HIGH/MEDIUM/LOW are reported but do not block.
-  # ────────────────────────────────────────────────────────────────────────────
   l2-trivy:
     name: "L2 · Trivy — SCA / CVE"
     runs-on: ubuntu-latest
@@ -225,7 +221,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: "CRITICAL"
-          exit-code: "0"          # never blocks — SARIF only for PR comment
+          exit-code: "0"
           ignore-unfixed: true
           skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
@@ -237,7 +233,7 @@ jobs:
           scan-ref: .
           format: table
           severity: "CRITICAL"
-          exit-code: "1"          # blocks PR only on CRITICAL
+          exit-code: "1"
           ignore-unfixed: true
           skip-dirs: "config/community,config/gitlab,.git,node_modules,vendor,.venv"
           trivy-config: .security-tools/config/trivy-comprehensive.yaml
@@ -263,7 +259,6 @@ jobs:
           sarif = json.load(open("trivy-results.sarif"))
           results = sarif["runs"][0]["results"]
 
-          # Only report CRITICAL — skip comment entirely if none
           critical = []
           for r in results:
               msg = r.get("message", {}).get("text", "")
