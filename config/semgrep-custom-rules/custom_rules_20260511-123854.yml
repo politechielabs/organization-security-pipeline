@@ -1,0 +1,31 @@
+# Auto-generated from run #28 — 20260511-123854
+rules:
+- id: custom.gap-overly-permissive-github-actions-permissions-generic
+  languages:
+  - generic
+  message: Overly permissive GitHub Actions workflow permissions detected. Granting
+    write-all or broad write access to sensitive permission scopes (contents, actions,
+    packages, deployments, security-events) violates the principle of least privilege.
+    A compromised or malicious workflow step can exfiltrate secrets, tamper with repository
+    contents, inject backdoors into packages, or escalate privileges across the supply
+    chain. Restrict each workflow and each job to only the minimum permission scopes
+    it strictly requires (CWE-269).
+  metadata:
+    category: Auth
+    cwe: CWE-269
+    subcategory: Overly Permissive GitHub Actions Permissions
+  paths:
+    include:
+    - .github/workflows/*.yml
+    - .github/workflows/*.yaml
+  pattern-either:
+  - pattern: 'permissions: write-all'
+  - pattern: 'contents: write'
+  - pattern: 'actions: write'
+  - pattern: 'packages: write'
+  - pattern: 'deployments: write'
+  - pattern: 'security-events: write'
+  - pattern: 'repository-projects: write'
+  - pattern: 'statuses: write'
+  severity: ERROR
+
