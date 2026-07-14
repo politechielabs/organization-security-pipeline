@@ -1,0 +1,80 @@
+# Auto-generated from run #32 — 20260511-124058
+rules:
+- id: custom.gap-timing-attack-password-comparison-py
+  languages:
+  - python
+  message: Direct equality comparison of a password, secret, or token using == or
+    != is vulnerable to timing attacks. An attacker can infer the secret value by
+    measuring response-time differences across many requests. Replace with hmac.compare_digest()
+    or secrets.compare_digest() for constant-time comparison (CWE-208).
+  metadata:
+    category: Crypto
+    cwe: CWE-208
+    subcategory: Timing Attack in Password Comparison
+  pattern-either:
+  - patterns:
+    - pattern: $A == $B
+    - metavariable-regex:
+        metavariable: $A
+        regex: .*(password|passwd|secret|token|api_key|apikey|auth_key|hmac|digest).*
+  - patterns:
+    - pattern: $A == $B
+    - metavariable-regex:
+        metavariable: $B
+        regex: .*(password|passwd|secret|token|api_key|apikey|auth_key|hmac|digest).*
+  - patterns:
+    - pattern: $A != $B
+    - metavariable-regex:
+        metavariable: $A
+        regex: .*(password|passwd|secret|token|api_key|apikey|auth_key|hmac|digest).*
+  - patterns:
+    - pattern: $A != $B
+    - metavariable-regex:
+        metavariable: $B
+        regex: .*(password|passwd|secret|token|api_key|apikey|auth_key|hmac|digest).*
+  severity: ERROR
+- id: custom.gap-overly-permissive-github-actions-permissions-generic
+  languages:
+  - generic
+  message: GitHub Actions workflow grants overly broad write permissions. Assigning
+    write-all or individual write grants (contents, actions, packages, secrets) violates
+    the principle of least privilege and allows a compromised workflow step to exfiltrate
+    secrets, overwrite repository contents, or publish malicious packages. Scope each
+    permission to only what the job strictly requires (CWE-250).
+  metadata:
+    category: Auth
+    cwe: CWE-250
+    subcategory: Overly Permissive GitHub Actions Workflow Permissions
+  paths:
+    include:
+    - .github/workflows/
+  pattern-either:
+  - pattern-regex: permissions:\s+write-all
+  - pattern-regex: contents:\s+write
+  - pattern-regex: actions:\s+write
+  - pattern-regex: packages:\s+write
+  - pattern-regex: secrets:\s+write
+  - pattern-regex: deployments:\s+write
+  - pattern-regex: repository-projects:\s+write
+  severity: ERROR
+- id: custom.gap-unpinned-reusable-workflow-generic
+  languages:
+  - generic
+  message: A reusable workflow or action is referenced by a mutable branch name or
+    version tag rather than a pinned full 40-character commit SHA. If the upstream
+    repository is compromised or the tag is moved, malicious code can be silently
+    injected into your CI/CD pipeline. Pin every uses directive to a full commit SHA
+    and annotate the human-readable tag in a comment (CWE-1357).
+  metadata:
+    category: Auth
+    cwe: CWE-1357
+    subcategory: Unpinned Reusable Workflow Reference (Supply Chain Risk)
+  paths:
+    include:
+    - .github/workflows/
+  pattern-either:
+  - pattern-regex: uses:\s+[\w\-\.]+/[\w\-\.\/]+@(main|master|HEAD|develop|trunk|latest|next|stable)\b
+  - pattern-regex: uses:\s+[\w\-\.]+/[\w\-\.\/]+@v\d+(\.\d+)*\b
+  - pattern-regex: uses:\s+[\w\-\.]+/[\w\-\.\/]+@\d+(\.\d+)+\b
+  severity: WARNING
+
